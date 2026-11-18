@@ -8,6 +8,9 @@ public enum AccountKind {
     CUSTOMER,
     /** Holds the money of transfers to other banks until those banks answer. */
     TRANSIT,
-    /** Stands for the bank's account at the National Bank, through which other banks are paid. */
+    /**
+     * Stands for the bank's account at the National Bank, through which other banks pay and are paid. Payments in
+     * take money from it, so its balance can be below zero.
+     */
     SETTLEMENT
 }

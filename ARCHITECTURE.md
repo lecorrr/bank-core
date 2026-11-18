@@ -1,7 +1,7 @@
 # Architecture
 
 One Spring Boot service, one PostgreSQL database, and Kafka to talk to bank-integration (Project 2). About
-2,500 lines of main Java, 3,300 lines of tests, and 800 lines of contract, SQL and schemas. Small enough to keep
+3,000 lines of main Java, 4,100 lines of tests, and 850 lines of contract, SQL and schemas. Small enough to keep
 in one Maven module; the boundaries are packages, and `LayeringTest` enforces them.
 
 ## Modules
@@ -11,9 +11,9 @@ in one Maven module; the boundaries are packages, and `LayeringTest` enforces th
 | `common` | `Amounts`, `BankException` and `ErrorCode`, `Iban`, the `Clock`; in `common.web` the request id filter and `ApiExceptionHandler` | nothing else of ours |
 | `ledger` | `LedgerEntry`: append-only statement lines, one per balance change | `common` |
 | `account` | `Account`, deposits, statements, the accounts API; `InternalAccounts`, the bank's own transit and settlement accounts | `common`, `ledger` |
-| `transfer` | `Transfer`, idempotency, the transfers API; `TransferSettlement`, which finishes a transfer to another bank once it answers | `common`, `ledger`, `account` |
+| `transfer` | `Transfer`, idempotency, the transfers API; `TransferSettlement`, which finishes a transfer to another bank once it answers; `IncomingTransfers`, which credits or refuses a payment from another bank | `common`, `ledger`, `account` |
 | `paymentfile` | file formats, the readers, batch processing, the upload API | `common`, `transfer` |
-| `interbank` | the Kafka contract with bank-integration: `TransferRequested` out through the outbox, `TransferStatusChanged` in | `common`, `transfer` |
+| `interbank` | the Kafka contract with bank-integration: `TransferRequested` and `IncomingTransferDecided` out through the outbox, `TransferStatusChanged` and `IncomingTransferReceived` in | `common`, `transfer` |
 
 The table is `MAY_DEPEND_ON` in `LayeringTest`; change both together. Two more rules are tested there:
 
@@ -22,7 +22,8 @@ The table is `MAY_DEPEND_ON` in `LayeringTest`; change both together. Two more r
 - Only controllers and `common.web` import HTTP or servlet types. Business code never knows it is behind
   HTTP, which is why `PaymentBatchService` can later be driven by a message queue (Project 2).
 - Only `interbank` imports Kafka or Spring Modulith types. `TransferService` publishes a plain Spring event,
-  `InterbankTransferPending`; how it reaches Kafka, and what it looks like there, is `interbank`'s business.
+  `InterbankTransferPending`, and `IncomingTransfers` another, `IncomingTransferDecision`; how they reach Kafka,
+  and what they look like there, is `interbank`'s business.
 
 `ledger` stores an account id, not an `Account` relation, so that it does not depend on `account`.
 
@@ -67,6 +68,26 @@ Every step writes new rows; nothing is updated in the ledger or deleted, so the 
 money leaving and, after a refusal, coming back. The transit account always holds exactly the money of the
 PENDING transfers, which makes a simple reconciliation check.
 
+A payment from a customer of another bank (flow B of bank-integration):
+
+```
+the other bank -> pacs.008 -> bank-integration
+Kafka interbank.incoming-transfers (key: payee's IBAN) -> IncomingTransferListener -> IncomingTransfers, one
+transaction:
+    lock SETTLEMENT and the payee's account (IBAN order), then look for a transfer with this UETR:
+    found:              its decision again (a copy of the payment)
+    no such customer:   Transfer REJECTED, UNKNOWN_ACCOUNT, no ledger entries
+    another currency:   Transfer REJECTED, CURRENCY_MISMATCH, no ledger entries
+    otherwise:          SETTLEMENT DEBIT, payee CREDIT (type INCOMING), Transfer COMPLETED
+    IncomingTransferDecision -> Spring Modulith writes it to event_publication
+after the commit: Modulith -> IncomingTransferDecided on Kafka interbank.incoming-transfer-decisions (key: UETR)
+bank-integration -> pacs.002 ACSC, or RJCT with AC01 or CURR -> the other bank
+```
+
+Such a transfer has the payer's IBAN at the other bank in `from_iban` and the payer's name in `from_name`, and is
+kept under its UETR instead of an Idempotency-Key; the V3 migration requires exactly one of the two. A refusal is a
+decision, not an error: it is kept, so a copy of the payment is refused again even if the account exists by then.
+
 ## Rules the code keeps
 
 - **Money** is `BigDecimal` with exactly two decimals, checked by `Amounts.requireValid`, compared with
@@ -75,10 +96,13 @@ PENDING transfers, which makes a simple reconciliation check.
   `LedgerEntry` with the balance after it, in the same transaction.
 - **Locks**: code that changes balances locks its two accounts through `LockedAccounts`, the smaller IBAN
   first, whichever way the money goes; that includes the transit and settlement accounts. An answer from
-  another bank locks its transfer row first (`findByIdForUpdate`), so a repeated answer waits for the first.
-  The database also checks `balance >= 0` and unique idempotency keys.
+  another bank locks its transfer row first (`findByIdForUpdate`), so a repeated answer waits for the first. A
+  payment from another bank locks the settlement account (and the payee's, in IBAN order) before it looks for its
+  UETR, so a copy that comes at the same time waits there and then finds the first one's transfer. The database
+  also checks `balance >= 0` on every account but SETTLEMENT, unique idempotency keys and unique UETRs.
 - **Events**: delivered at least once in both directions, so both sides make a repeat harmless: bank-core
-  applies an answer only to a PENDING transfer, and a replayed transfer request publishes nothing.
+  applies an answer only to a PENDING transfer, a replayed transfer request publishes nothing, and a copy of a
+  payment from another bank publishes the decision it got the first time.
 - **Errors**: business code throws `BankException` with an `ErrorCode`. `ApiExceptionHandler.statusOf` is
   the only place that maps codes to HTTP statuses; its `switch` has no default, so a new code does not
   compile until it has a status.
@@ -103,11 +127,22 @@ PENDING transfers, which makes a simple reconciliation check.
   check and then retried the same way. Only these Modulith modules are used, not its module checks.
 - **Kafka is optional at runtime.** Without it bank-core starts and serves everything else; transfers to other banks
   wait in the outbox and their answers wait on the topic.
-- **Status events that cannot be read are skipped and logged**; no retry makes them readable. An answer that fails
-  for another reason (the database is down) is retried every 5 seconds and never skipped, because skipping it would
-  leave the transfer PENDING for good. Step 4 of Project 2 adds a dead-letter topic.
-- **The transit account is a hot row**: every transfer to another bank locks it. Fine at this size; at bank scale it
-  would be split, or its balance kept from the entries instead of on the row.
+- **Events that cannot be read are skipped and logged** (`InterbankJson`); no retry makes them readable. An
+  unreadable payment from another bank is logged as an error: it stays without an answer, so a person has to look.
+  An event that fails for another reason (the database is down) is retried every 5 seconds and never skipped,
+  because skipping an answer would leave its transfer PENDING for good, and skipping a payment would leave it
+  without a decision. bank-integration validates every event before it publishes it, so an unreadable one means a
+  bug on one side.
+- **The settlement account can go below zero.** It stands for the bank's account at the National Bank: payments
+  out add to it once settled, payments in take from it, and a bank with more coming in than going out is below
+  zero there, which is no customer's debt. `Account.debit` and the database's balance check make that exception
+  for SETTLEMENT only.
+- **bank-core decides on the account, bank-integration on the message.** Whether a payment's bank, currency and
+  account number fit our bank at all is bank-integration's check (`IncomingChecks`), made before bank-core sees
+  it; whether the account exists and is kept in that currency only bank-core can say.
+- **The transit and settlement accounts are hot rows**: every transfer to another bank locks the transit account,
+  and every payment from one the settlement account. Fine at this size; at bank scale they would be split, or their
+  balances kept from the entries instead of on the row.
 
 ## Extending it
 
@@ -117,7 +152,7 @@ PENDING transfers, which makes a simple reconciliation check.
   insists), then a test that triggers it.
 - **New payment file format** (say CSV): add a `PaymentFileFormat` value and its detection, write a
   `PaymentFileReader` `@Component`. `PaymentBatchService` refuses to start if a format has no reader.
-- **New table or column**: a new Flyway file `V2__....sql`; never edit `V1` once it has run anywhere.
+- **New table or column**: the next Flyway file, `V4__....sql`; never edit one that has run anywhere.
   Hibernate validates the mapping at startup (`ddl-auto: validate`).
 - **A new module** (say `card`): a package with its own entity, service and controller, a line in
   `MAY_DEPEND_ON` and in the table above.

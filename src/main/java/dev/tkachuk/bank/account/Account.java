@@ -83,12 +83,14 @@ public class Account {
 
     /**
      * Takes money out of the account. The amount must come from Amounts.requireValid. Refuses with
-     * INSUFFICIENT_FUNDS when the balance is too small, and then leaves the balance unchanged.
+     * INSUFFICIENT_FUNDS when the balance is too small, and then leaves the balance unchanged; the settlement
+     * account never refuses, since it stands for the bank's position at the National Bank, which can go below zero
+     * (the V3 migration allows it there and nowhere else).
      */
     public void debit(BigDecimal amount) {
         requirePositive(amount);
         // compareTo, not equals: equals also compares the scale, so 100.0 and 100.00 would differ.
-        if (balance.compareTo(amount) < 0) {
+        if (kind != AccountKind.SETTLEMENT && balance.compareTo(amount) < 0) {
             throw new BankException(ErrorCode.INSUFFICIENT_FUNDS,
                     "Account " + iban + " does not have " + amount.toPlainString() + " " + currency);
         }

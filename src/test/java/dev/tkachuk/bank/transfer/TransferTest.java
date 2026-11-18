@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import dev.tkachuk.bank.support.TestIbans;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.UUID;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -15,6 +16,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 class TransferTest {
 
     private static final Instant NOW = Instant.parse("2026-11-09T10:00:00Z");
+    private static final UUID UETR = UUID.fromString("3b9f7a52-1c4d-4e8f-a0b6-7d2e5c9f1a34");
 
     private static final TransferCommand ORIGINAL = new TransferCommand("key-1", TestIbans.A, TestIbans.B,
             new BigDecimal("150.00"), "UAH", "Rent");
@@ -99,6 +101,26 @@ class TransferTest {
         assertThatThrownBy(() -> settled.settle("REPORT-2")).isInstanceOf(IllegalStateException.class);
         assertThat(settled.getStatus()).isEqualTo(TransferStatus.COMPLETED);
         assertThat(settled.getStatusReportId()).isEqualTo("REPORT-1");
+    }
+
+    @Test
+    void aPaymentFromAnotherBankIsKeptUnderItsUetrAndNeedsNoIdempotencyKey() {
+        IncomingTransferCommand payment = new IncomingTransferCommand(UETR, TestIbans.PARTNER, "Olena Kovalenko",
+                TestIbans.A, "Artem Demo", new BigDecimal("250.00"), "UAH", "For the concert tickets", NOW);
+
+        Transfer credited = Transfer.incomingCredited(payment, NOW);
+        Transfer refused = Transfer.incomingRejected(payment, IncomingTransferRejection.UNKNOWN_ACCOUNT, NOW);
+
+        assertThat(credited.getStatus()).isEqualTo(TransferStatus.COMPLETED);
+        assertThat(credited.getUetr()).isEqualTo(UETR);
+        assertThat(credited.getIdempotencyKey()).isNull();
+        assertThat(credited.getFromName()).isEqualTo("Olena Kovalenko");
+        assertThat(credited.getRejectionReason()).isNull();
+        assertThat(refused.getStatus()).isEqualTo(TransferStatus.REJECTED);
+        assertThat(refused.getRejectionReason()).isEqualTo(IncomingTransferRejection.UNKNOWN_ACCOUNT);
+        assertThat(refused.isPending()).isFalse();
+        assertThatThrownBy(() -> Transfer.incomingRejected(payment, null, NOW)).isInstanceOf(
+                NullPointerException.class);
     }
 
     @Test

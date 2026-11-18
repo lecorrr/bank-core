@@ -1,10 +1,10 @@
 # bank-core
 
-A small core-banking service: customer accounts, deposits, money transfers within the bank and to other
-Ukrainian banks, and bulk payment files in JSON or ISO 20022 XML. Transfers to other banks go through
+A small core-banking service: customer accounts, deposits, money transfers within the bank, to other Ukrainian
+banks and from them, and bulk payment files in JSON or ISO 20022 XML. Payments between banks go through
 [bank-integration](https://github.com/lecorrr/bank-integration), which carries them as ISO 20022 messages.
 
-**Status: 0.4.0.** Everything listed below is in place, and every build checks it with unit and integration
+**Status: 0.5.0.** Everything listed below is in place, and every build checks it with unit and integration
 tests and an 80 % line-coverage gate.
 
 What it covers:
@@ -18,6 +18,10 @@ What it covers:
 - **Transfers to other banks**: PENDING until the other bank answers, with the money held in a transit account;
   a transactional outbox (Spring Modulith) sends the transfer to Kafka, and the answer coming back from Kafka
   completes it or gives the money back, with new ledger entries either way.
+- **Payments from other banks**: a payment a customer of another bank sends comes in from Kafka and is decided
+  once, by its UETR: credited from the settlement account, which stands for the bank's position at the National
+  Bank, or refused (no such account here, or one in another currency). The decision goes back through the outbox,
+  and a copy of the payment gets the same decision again.
 - **Payment files**: one upload pays many creditors. JSON is checked against a JSON Schema and a simplified
   ISO 20022 `pain.001` against its XSD, with every problem reported at once; an XML file with a DOCTYPE is
   refused outright, which rules out XXE. Each payment is its own transfer, so uploading a file again pays
@@ -67,14 +71,15 @@ Or run both in Docker; build the jar first:
 docker compose up --build
 ```
 
-Once it is up, the log says which build is running (`bank-core 0.4.0 started`). Swagger UI is at
+Once it is up, the log says which build is running (`bank-core 0.5.0 started`). Swagger UI is at
 <http://localhost:8080/swagger-ui.html> and health at <http://localhost:8080/actuator/health>.
 
-Transfers to other banks need bank-integration's stack, which has the Kafka bank-core talks to
+Payments to and from other banks need bank-integration's stack, which has the Kafka bank-core talks to
 (`KAFKA_BOOTSTRAP_SERVERS`, `localhost:9092` by default). Start it from that repository with
 `docker compose up -d --build`, then run bank-core with `spring-boot:run` as above. Without Kafka everything else
-works; transfers to other banks then wait in the outbox, and the log warns every 30 seconds that Kafka is not
-there. The Docker version of bank-core cannot reach that Kafka, so use `spring-boot:run` for them.
+works; transfers to other banks then wait in the outbox, payments from them wait on the topic, and the log warns
+every 30 seconds that Kafka is not there. The Docker version of bank-core cannot reach that Kafka, so use
+`spring-boot:run` for them.
 
 ## Try it
 
@@ -118,7 +123,20 @@ A moment later the partner bank has accepted it, and `GET /api/v1/transfers/{id}
 shows `COMPLETED`. The partner bank refuses payments to the closed account `UA843888880000000000000000999`:
 a transfer there ends `REJECTED`, and the payer's statement shows the money coming back (`REVERSAL`).
 
-The bank's own accounts and the outbox, straight from the database:
+Receive 250 UAH from a customer of the partner bank, with bank-integration running: its simulator sends the
+payment (answering `202` with the payment's `uetr`), and a moment later the payee's statement shows it as an
+`INCOMING` entry:
+
+```
+curl -sS -w '\n' -X POST localhost:8083/api/payments -H 'Content-Type: application/json' -d '{"toIban": "UA843999990000000000000000001", "toName": "Artem Demo", "amount": 250.00, "description": "For the concert tickets"}'
+```
+
+`GET localhost:8083/api/payments/{uetr}` shows what bank-core's bank answered the partner bank: `ACSC`. A payment
+to `UA733999990000000000000000005`, an account this bank does not keep, is refused (`RJCT` with `AC01`), and one to
+the dollar account `UA033999990000000000000000004` too (`CURR`); neither moves any money.
+
+The bank's own accounts and the outbox, straight from the database. After payments in, the settlement account is
+below zero: it is the bank's position at the National Bank, not anyone's debt:
 
 ```
 docker compose exec postgres psql -U bank -d bank -c "SELECT iban, kind, balance FROM accounts WHERE kind <> 'CUSTOMER'" -c "SELECT event_type, status, publication_date FROM event_publication"
@@ -168,12 +186,12 @@ src/main/java/dev/tkachuk/bank/
   common/        Amounts, errors, IBAN, the clock, web filter and error handler
   ledger/        ledger entries (statement lines)
   account/       accounts, deposits, statements
-  transfer/      transfers and idempotency; finishing a transfer to another bank
+  transfer/      transfers and idempotency; finishing a transfer to another bank; payments from other banks
   paymentfile/   JSON and XML payment files, batch processing
   interbank/     Kafka events to and from bank-integration
 src/main/resources/
   static/openapi/bank-core.yaml   the API contract (source of truth)
-  db/migration/                   Flyway schema, the bank's own accounts and the outbox table; db/demo/ holds demo data
+  db/migration/                   Flyway schema, the bank's own accounts, the outbox table; db/demo/ holds demo data
   schemas/                        JSON Schema and XSD for payment files
 src/test/                         tests, sample payment files
 scripts/setup.sh                  machine setup and first build

@@ -56,6 +56,20 @@ public final class Iban {
     }
 
     /**
+     * As parse(), for an IBAN that another bank's message names, where one that is not valid is a reason to refuse
+     * the message rather than an error.
+     *
+     * @return empty when the IBAN is not valid
+     */
+    public static Optional<Iban> tryParse(String raw) {
+        try {
+            return Optional.of(parse(raw));
+        } catch (BankException e) {
+            return Optional.empty();
+        }
+    }
+
+    /**
      * ISO 7064 MOD 97-10 over an IBAN that already has a valid shape. The first four characters move to
      * the end and each letter stands for two digits (A = 10 ... Z = 35). That number is far too big for a long,
      * so only the remainder is kept: it stays below 97, and remainder * 100 + 35 always fits in an int.

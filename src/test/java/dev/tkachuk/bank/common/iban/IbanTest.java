@@ -79,6 +79,13 @@ class IbanTest {
     }
 
     @Test
+    void tryParseGivesTheIbanOrNothing() {
+        assertThat(Iban.tryParse("ua84 3999 9900 0000 0000 0000 0000 1")).contains(Iban.parse(TestIbans.A));
+        assertThat(Iban.tryParse("UA223223130000026007233566001")).isEmpty();
+        assertThat(Iban.tryParse(null)).isEmpty();
+    }
+
+    @Test
     void aUkrainianIbanNamesItsBank() {
         assertThat(Iban.parse(TestIbans.A).ukrainianBankCode()).contains("399999");
         assertThat(Iban.parse(TestIbans.PARTNER).ukrainianBankCode()).contains("388888");

@@ -10,21 +10,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.jayway.jsonpath.JsonPath;
 import dev.tkachuk.bank.support.IntegrationTest;
+import dev.tkachuk.bank.support.KafkaEvents;
 import dev.tkachuk.bank.support.TestIbans;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.TimeUnit;
-import org.apache.kafka.clients.consumer.ConsumerConfig;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
-import org.apache.kafka.clients.consumer.KafkaConsumer;
-import org.apache.kafka.clients.producer.KafkaProducer;
-import org.apache.kafka.clients.producer.ProducerConfig;
-import org.apache.kafka.clients.producer.ProducerRecord;
-import org.apache.kafka.common.serialization.StringDeserializer;
-import org.apache.kafka.common.serialization.StringSerializer;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -45,8 +35,11 @@ class InterbankTransferIT extends IntegrationTest {
     @Autowired
     private KafkaContainer kafka;
 
+    private KafkaEvents bankIntegration;
+
     @BeforeEach
     void openThePayersAccount() {
+        bankIntegration = new KafkaEvents(kafka, TIMEOUT);
         insertAccount(TestIbans.A, "Artem Tkachuk", "UAH", "1000.00");
     }
 
@@ -57,7 +50,7 @@ class InterbankTransferIT extends IntegrationTest {
         assertThat(balanceOf(TestIbans.A)).isEqualByComparingTo("850.00");
         assertThat(balanceOf(TestIbans.TRANSIT)).isEqualByComparingTo("150.00");
 
-        ConsumerRecord<String, String> event = eventAbout(TransferRequested.TOPIC, transferId);
+        ConsumerRecord<String, String> event = bankIntegration.eventAbout(TransferRequested.TOPIC, transferId);
         assertThat(event.key()).as("keyed by the payer's IBAN").isEqualTo(TestIbans.A);
         String json = event.value();
         assertThat(JsonPath.<String>read(json, "$.transferId")).isEqualTo(transferId);
@@ -137,7 +130,7 @@ class InterbankTransferIT extends IntegrationTest {
     void anEventThatCannotBeReadIsSkippedAndTheNextOneStillApplies() throws Exception {
         String transferId = sendToPartner("key-1");
 
-        publish(TransferStatusChanged.TOPIC, transferId, "not json");
+        bankIntegration.publish(TransferStatusChanged.TOPIC, transferId, "not json");
         answer(transferId, "SETTLED", "REPORT-1");
 
         awaitStatus(transferId, "COMPLETED");
@@ -177,37 +170,8 @@ class InterbankTransferIT extends IntegrationTest {
 
     /** Answers as bank-integration does: JSON text, keyed by the transfer id. */
     private void answer(String transferId, String status, String reportId) throws Exception {
-        publish(TransferStatusChanged.TOPIC, transferId, """
+        bankIntegration.publish(TransferStatusChanged.TOPIC, transferId, """
                 {"transferId": "%s", "status": "%s", "reportId": "%s", "reportedAt": "2026-11-17T20:17:09Z"}
                 """.formatted(transferId, status, reportId));
-    }
-
-    private void publish(String topic, String key, String value) throws Exception {
-        Map<String, Object> config = Map.of(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());
-        try (KafkaProducer<String, String> producer =
-                new KafkaProducer<>(config, new StringSerializer(), new StringSerializer())) {
-            producer.send(new ProducerRecord<>(topic, key, value)).get(TIMEOUT.toSeconds(), TimeUnit.SECONDS);
-        }
-    }
-
-    /** The event about this transfer, read from the start of the topic in a consumer group of its own. */
-    private ConsumerRecord<String, String> eventAbout(String topic, String transferId) {
-        Map<String, Object> config = Map.of(
-                ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers(),
-                ConsumerConfig.GROUP_ID_CONFIG, "test-" + UUID.randomUUID(),
-                ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
-        try (KafkaConsumer<String, String> consumer =
-                new KafkaConsumer<>(config, new StringDeserializer(), new StringDeserializer())) {
-            consumer.subscribe(List.of(topic));
-            Instant deadline = Instant.now().plus(TIMEOUT);
-            while (Instant.now().isBefore(deadline)) {
-                for (ConsumerRecord<String, String> record : consumer.poll(Duration.ofMillis(500))) {
-                    if (record.value() != null && record.value().contains(transferId)) {
-                        return record;
-                    }
-                }
-            }
-        }
-        throw new AssertionError("No event about transfer " + transferId + " on " + topic + " within " + TIMEOUT);
     }
 }

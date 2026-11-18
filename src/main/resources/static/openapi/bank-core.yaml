@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Bank Core API
-  version: 0.4.0
+  version: 0.5.0
   description: |
     Accounts, transfers and payment files for a small digital bank.
     This file is the contract: the Spring interfaces and DTOs are generated from it at build time.
@@ -169,6 +169,9 @@ paths:
       tags: [Transfers]
       operationId: getTransfer
       summary: Get one transfer
+      description: >-
+        A customer's transfer, or a payment a customer of another bank sent to a customer of this one: such a
+        payment has the payer's name in fromName, and its account at the other bank in fromIban.
       parameters:
         - name: transferId
           in: path
@@ -349,6 +352,10 @@ components:
           format: uuid
         fromIban:
           type: string
+        fromName:
+          type: string
+          nullable: true
+          description: The payer's name, for a payment from another bank; empty for a customer's own transfer
         toIban:
           type: string
         toName:
@@ -364,7 +371,9 @@ components:
           type: string
           enum: [PENDING, COMPLETED, REJECTED]
           description: >-
-            PENDING while another bank has not answered yet; REJECTED when it refused, and the money went back
+            PENDING while another bank has not answered yet; REJECTED when it refused, and the money went back. A
+            payment from another bank is COMPLETED once credited, or REJECTED when this bank refused it, and then no
+            money moved
         createdAt:
           type: string
           format: date-time
@@ -378,10 +387,11 @@ components:
           format: int64
         type:
           type: string
-          enum: [DEPOSIT, TRANSFER, SETTLEMENT, REVERSAL]
+          enum: [DEPOSIT, TRANSFER, SETTLEMENT, REVERSAL, INCOMING]
           description: >-
-            REVERSAL gives back the money of a transfer another bank refused. SETTLEMENT entries belong to the
-            bank's own accounts and never appear on a customer's statement.
+            REVERSAL gives back the money of a transfer another bank refused, and INCOMING brings in a payment from
+            a customer of another bank. SETTLEMENT entries belong to the bank's own accounts and never appear on a
+            customer's statement.
         direction:
           type: string
           enum: [DEBIT, CREDIT]

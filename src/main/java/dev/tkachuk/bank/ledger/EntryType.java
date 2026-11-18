@@ -8,5 +8,7 @@ public enum EntryType {
     /** The other bank accepted a transfer: its money moves from the transit account to the settlement account. */
     SETTLEMENT,
     /** The other bank refused a transfer: its money goes back from the transit account to the customer. */
-    REVERSAL
+    REVERSAL,
+    /** A payment from another bank: its money moves from the settlement account to the payee. */
+    INCOMING
 }
