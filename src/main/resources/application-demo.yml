@@ -1,0 +1,4 @@
+# Demo profile: adds a few accounts with money so the API can be tried right away.
+spring:
+  flyway:
+    locations: classpath:db/migration,classpath:db/demo

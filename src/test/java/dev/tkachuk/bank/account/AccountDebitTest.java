@@ -1,0 +1,51 @@
+package dev.tkachuk.bank.account;
+
+import static dev.tkachuk.bank.support.BankErrors.codeOf;
+import static org.assertj.core.api.Assertions.assertThat;
+
+import dev.tkachuk.bank.common.error.ErrorCode;
+import dev.tkachuk.bank.support.TestAccounts;
+import dev.tkachuk.bank.support.TestIbans;
+import java.math.BigDecimal;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
+
+class AccountDebitTest {
+
+    private final Account account = TestAccounts.account(1, TestIbans.A, "UAH", "100.00");
+
+    @Test
+    void takesMoneyOut() {
+        account.debit(new BigDecimal("30.00"));
+
+        assertThat(account.getBalance()).isEqualByComparingTo("70.00");
+    }
+
+    @Test
+    void canEmptyTheAccount() {
+        account.debit(new BigDecimal("100.00"));
+
+        assertThat(account.getBalance()).isEqualByComparingTo("0.00");
+    }
+
+    @Test
+    void refusesToGoBelowZeroAndChangesNothing() {
+        assertThat(codeOf(() -> account.debit(new BigDecimal("100.01")))).isEqualTo(ErrorCode.INSUFFICIENT_FUNDS);
+
+        assertThat(account.getBalance()).isEqualByComparingTo("100.00");
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"0", "-1"})
+    void refusesAmountsThatAreNotPositive(BigDecimal amount) {
+        assertThat(codeOf(() -> account.debit(amount))).isEqualTo(ErrorCode.INVALID_AMOUNT);
+
+        assertThat(account.getBalance()).isEqualByComparingTo("100.00");
+    }
+
+    @Test
+    void refusesNoAmount() {
+        assertThat(codeOf(() -> account.debit(null))).isEqualTo(ErrorCode.INVALID_AMOUNT);
+    }
+}

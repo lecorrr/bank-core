@@ -1,0 +1,40 @@
+# Local PostgreSQL, and the app itself for a demo. Ports are published on localhost only.
+#   database only:  docker compose up -d postgres
+#   app and db:     ./mvnw -DskipTests package && docker compose up --build
+name: bank-core
+
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: bank
+      POSTGRES_USER: bank
+      POSTGRES_PASSWORD: bank
+    ports:
+      # 5434 on the host by default: 5432 is often a native PostgreSQL and 5433 another project's.
+      # BANK_DB_PORT changes it; the app reads the same variable.
+      - "127.0.0.1:${BANK_DB_PORT:-5434}:5432"
+    volumes:
+      - bank-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U bank -d bank"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  app:
+    build: .
+    image: bank-core:local
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/bank
+      SPRING_PROFILES_ACTIVE: demo
+      # JSON logs in Elastic Common Schema, ready for ELK in Project 3.
+      LOGGING_STRUCTURED_FORMAT_CONSOLE: ecs
+    ports:
+      - "127.0.0.1:8080:8080"
+
+volumes:
+  bank-db:

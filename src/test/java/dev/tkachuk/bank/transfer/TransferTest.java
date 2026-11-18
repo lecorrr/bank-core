@@ -1,0 +1,109 @@
+package dev.tkachuk.bank.transfer;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
+import dev.tkachuk.bank.support.TestIbans;
+import java.math.BigDecimal;
+import java.time.Instant;
+import java.util.stream.Stream;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.MethodSource;
+
+class TransferTest {
+
+    private static final Instant NOW = Instant.parse("2026-11-09T10:00:00Z");
+
+    private static final TransferCommand ORIGINAL = new TransferCommand("key-1", TestIbans.A, TestIbans.B,
+            new BigDecimal("150.00"), "UAH", "Rent");
+
+    private static final TransferCommand TO_PARTNER = new TransferCommand("key-2", TestIbans.A, TestIbans.PARTNER,
+            "Olena Kovalenko", new BigDecimal("150.00"), "UAH", "Rent");
+
+    private final Transfer transfer = Transfer.completed(ORIGINAL, NOW);
+
+    @Test
+    void theSameRequestHasTheSamePayload() {
+        assertThat(transfer.hasSamePayloadAs(ORIGINAL)).isTrue();
+    }
+
+    @Test
+    void amountsAreComparedByValueNotByScale() {
+        TransferCommand sameAmountOneDecimal = new TransferCommand("key-1", TestIbans.A, TestIbans.B,
+                new BigDecimal("150.0"), "UAH", "Rent");
+
+        assertThat(transfer.hasSamePayloadAs(sameAmountOneDecimal)).isTrue();
+    }
+
+    @ParameterizedTest(name = "different {0}")
+    @MethodSource("changedRequests")
+    void anyOtherDifferenceIsAnotherRequest(String changed, TransferCommand command) {
+        assertThat(transfer.hasSamePayloadAs(command)).isFalse();
+    }
+
+    static Stream<Arguments> changedRequests() {
+        return Stream.of(
+                Arguments.of("from account", new TransferCommand("key-1", TestIbans.C, TestIbans.B,
+                        new BigDecimal("150.00"), "UAH", "Rent")),
+                Arguments.of("to account", new TransferCommand("key-1", TestIbans.A, TestIbans.C,
+                        new BigDecimal("150.00"), "UAH", "Rent")),
+                Arguments.of("payee name", new TransferCommand("key-1", TestIbans.A, TestIbans.B,
+                        "Olena Kovalenko", new BigDecimal("150.00"), "UAH", "Rent")),
+                Arguments.of("amount", new TransferCommand("key-1", TestIbans.A, TestIbans.B,
+                        new BigDecimal("150.01"), "UAH", "Rent")),
+                Arguments.of("currency", new TransferCommand("key-1", TestIbans.A, TestIbans.B,
+                        new BigDecimal("150.00"), "USD", "Rent")),
+                Arguments.of("description", new TransferCommand("key-1", TestIbans.A, TestIbans.B,
+                        new BigDecimal("150.00"), "UAH", "Rent for May")));
+    }
+
+    @Test
+    void aTransferToAnotherBankWaitsForItsAnswer() {
+        Transfer pending = Transfer.pending(TO_PARTNER, NOW);
+
+        assertThat(pending.getStatus()).isEqualTo(TransferStatus.PENDING);
+        assertThat(pending.isPending()).isTrue();
+        assertThat(pending.getToName()).isEqualTo("Olena Kovalenko");
+        assertThat(pending.getStatusReportId()).isNull();
+        assertThat(pending.hasSamePayloadAs(TO_PARTNER)).isTrue();
+    }
+
+    @Test
+    void acceptedItIsCompletedWithTheReportThatSaidSo() {
+        Transfer pending = Transfer.pending(TO_PARTNER, NOW);
+
+        pending.settle("REPORT-1");
+
+        assertThat(pending.getStatus()).isEqualTo(TransferStatus.COMPLETED);
+        assertThat(pending.getStatusReportId()).isEqualTo("REPORT-1");
+    }
+
+    @Test
+    void refusedItIsRejectedWithTheReportThatSaidSo() {
+        Transfer pending = Transfer.pending(TO_PARTNER, NOW);
+
+        pending.reject("REPORT-1");
+
+        assertThat(pending.getStatus()).isEqualTo(TransferStatus.REJECTED);
+        assertThat(pending.getStatusReportId()).isEqualTo("REPORT-1");
+    }
+
+    @Test
+    void aTransferTakesOneAnswerOnly() {
+        Transfer settled = Transfer.pending(TO_PARTNER, NOW);
+        settled.settle("REPORT-1");
+
+        assertThatThrownBy(() -> settled.reject("REPORT-2")).isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> settled.settle("REPORT-2")).isInstanceOf(IllegalStateException.class);
+        assertThat(settled.getStatus()).isEqualTo(TransferStatus.COMPLETED);
+        assertThat(settled.getStatusReportId()).isEqualTo("REPORT-1");
+    }
+
+    @Test
+    void aTransferWithinTheBankTakesNoAnswer() {
+        assertThatThrownBy(() -> transfer.settle("REPORT-1")).isInstanceOf(IllegalStateException.class);
+        assertThat(transfer.getStatus()).isEqualTo(TransferStatus.COMPLETED);
+    }
+}

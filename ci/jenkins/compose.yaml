@@ -1,0 +1,28 @@
+# A local Jenkins that builds bank-core from your own repository. Read docs/jenkins.md first.
+name: bank-core-ci
+
+services:
+  jenkins:
+    build: .
+    image: bank-core-jenkins:local
+    ports:
+      # 8081 because the application itself uses 8080.
+      - "127.0.0.1:8081:8080"
+    environment:
+      # Lets a job use a repository on a local path (file:///repos/bank-core).
+      JAVA_OPTS: -Dhudson.plugins.git.GitSCM.ALLOW_LOCAL_CHECKOUT=true
+      # Testcontainers inside this container reaches the database containers through the host.
+      TESTCONTAINERS_HOST_OVERRIDE: host.docker.internal
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    group_add:
+      # The host's docker group id, so the jenkins user may use the Docker socket.
+      - "${DOCKER_GID:?set DOCKER_GID to the docker group id, see docs/jenkins.md}"
+    volumes:
+      - jenkins-home:/var/jenkins_home
+      # Full control of the host's Docker: fine on your own laptop, never on a shared server.
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ../..:/repos/bank-core:ro
+
+volumes:
+  jenkins-home:

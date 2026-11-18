@@ -1,0 +1,20 @@
+{
+  "messageId": "MSG-TEST-JSON-0002",
+  "debtorIban": "UA843999990000000000000000001",
+  "priority": "HIGH",
+  "payments": [
+    {
+      "endToEndId": "E2E-1",
+      "creditorIban": "not-an-iban",
+      "creditorName": "Olena Kovalenko",
+      "amount": -5,
+      "currency": "UAH"
+    },
+    {
+      "endToEndId": "E2E-2",
+      "creditorIban": "UA303999990000000000000000003",
+      "amount": 10,
+      "currency": "GBP"
+    }
+  ]
+}

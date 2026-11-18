@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Document xmlns="urn:bank-core:pain.001.simplified">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>MSG-DEMO-XML-0001</MsgId>
+      <CreDtTm>2026-11-09T10:00:00</CreDtTm>
+      <NbOfTxs>2</NbOfTxs>
+      <CtrlSum>350.50</CtrlSum>
+    </GrpHdr>
+    <PmtInf>
+      <DbtrAcct>
+        <IBAN>UA843999990000000000000000001</IBAN>
+      </DbtrAcct>
+      <CdtTrfTxInf>
+        <PmtId>
+          <EndToEndId>E2E-1</EndToEndId>
+        </PmtId>
+        <Amt>
+          <InstdAmt Ccy="UAH">150.00</InstdAmt>
+        </Amt>
+        <Cdtr>
+          <Nm>Olena Kovalenko</Nm>
+        </Cdtr>
+        <CdtrAcct>
+          <IBAN>UA573999990000000000000000002</IBAN>
+        </CdtrAcct>
+        <RmtInf>
+          <Ustrd>Invoice 17 (demo)</Ustrd>
+        </RmtInf>
+      </CdtTrfTxInf>
+      <CdtTrfTxInf>
+        <PmtId>
+          <EndToEndId>E2E-2</EndToEndId>
+        </PmtId>
+        <Amt>
+          <InstdAmt Ccy="UAH">200.50</InstdAmt>
+        </Amt>
+        <Cdtr>
+          <Nm>Supplier LLC</Nm>
+        </Cdtr>
+        <CdtrAcct>
+          <IBAN>UA303999990000000000000000003</IBAN>
+        </CdtrAcct>
+      </CdtTrfTxInf>
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>

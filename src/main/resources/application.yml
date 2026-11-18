@@ -1,0 +1,81 @@
+bank:
+  # This bank's code (MFO): the six digits after the check digits in its IBANs. A transfer to an IBAN with another
+  # code goes to that bank, through bank-integration.
+  code: "399999"
+
+spring:
+  application:
+    name: bank-core
+  datasource:
+    # The docker compose Postgres listens on localhost:5434, or on BANK_DB_PORT when that is set.
+    url: ${DB_URL:jdbc:postgresql://localhost:${BANK_DB_PORT:5434}/bank}
+    username: ${DB_USER:bank}
+    password: ${DB_PASSWORD:bank}
+    hikari:
+      # A lock wait longer than this fails the request instead of hanging it.
+      connection-init-sql: SET lock_timeout TO '5s'
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        jdbc:
+          time_zone: UTC
+  flyway:
+    locations: classpath:db/migration
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 5MB
+  kafka:
+    # bank-integration's Kafka. bank-core runs without it too: transfers to other banks then wait in the outbox
+    # until it is back, and their answers wait on the topic.
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      # Spring Modulith hands each event over as JSON bytes; the key is the payer's IBAN.
+      key-serializer: org.apache.kafka.common.serialization.StringSerializer
+      value-serializer: org.apache.kafka.common.serialization.ByteArraySerializer
+    consumer:
+      auto-offset-reset: earliest
+      properties:
+        # Without Kafka the consumer keeps reconnecting; this keeps that to one log warning every 30 seconds.
+        reconnect.backoff.max.ms: 30000
+  modulith:
+    events:
+      # A delivered event is deleted, so event_publication holds only what has not reached Kafka yet.
+      completion-mode: delete
+      # Sends FAILED events again at startup; FailedEventResubmission does it every 30 seconds after that.
+      republish-outstanding-events-on-restart: true
+      # An event that a crash left unfinished is marked FAILED after this long, and is then sent again. Longer than
+      # a Kafka send can take (delivery.timeout.ms, 2 minutes), so an event still on its way is never sent twice.
+      staleness:
+        published: 2m
+        processing: 5m
+        resubmitted: 5m
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  swagger-ui:
+    # Show the hand-written contract (the source of truth), not one generated from the code.
+    url: /openapi/bank-core.yaml
+
+logging:
+  level:
+    dev.tkachuk.bank: INFO
+    # The consumer settings Kafka prints at every start: a page of lines that say nothing new.
+    org.apache.kafka.clients.consumer.ConsumerConfig: WARN
+    org.apache.kafka.clients.producer.ProducerConfig: WARN
+  pattern:
+    # Puts the request id from RequestIdFilter on every console line, so one request's lines grep together.
+    # (In Docker the logs are ECS JSON, which carries it as a field anyway.)
+    correlation: "[%X{requestId:-}] "

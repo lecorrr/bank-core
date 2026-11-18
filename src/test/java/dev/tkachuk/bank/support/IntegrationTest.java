@@ -1,0 +1,61 @@
+package dev.tkachuk.bank.support;
+
+import java.math.BigDecimal;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.jdbc.JdbcTestUtils;
+import org.springframework.test.web.servlet.MockMvc;
+
+/**
+ * Base class for integration tests: the whole application against a real PostgreSQL and a real Kafka.
+ * Every test starts with empty tables, so tests never depend on each other; the bank's own accounts, which the
+ * V2 migration creates, stay with zero balances. Accounts are inserted with SQL, so a test sets up exactly the
+ * accounts it needs without going through the API.
+ */
+@SpringBootTest
+@AutoConfigureMockMvc
+@Import({PostgresTestcontainer.class, KafkaTestcontainer.class})
+public abstract class IntegrationTest {
+
+    @Autowired
+    protected MockMvc mockMvc;
+
+    @Autowired
+    protected JdbcTemplate jdbc;
+
+    @BeforeEach
+    void cleanDatabase() {
+        jdbc.execute("TRUNCATE ledger_entries, transfers, event_publication RESTART IDENTITY");
+        jdbc.execute("DELETE FROM accounts WHERE kind = 'CUSTOMER'");
+        jdbc.execute("UPDATE accounts SET balance = 0");
+    }
+
+    protected long insertAccount(String iban, String holderName, String currency, String balance) {
+        Long id = jdbc.queryForObject("""
+                INSERT INTO accounts (iban, holder_name, currency, balance, version, created_at)
+                VALUES (?, ?, ?, ?, 0, now())
+                RETURNING id
+                """, Long.class, iban, holderName, currency, new BigDecimal(balance));
+        if (id == null) {
+            throw new IllegalStateException("Inserting account " + iban + " returned no id");
+        }
+        return id;
+    }
+
+    protected BigDecimal balanceOf(String iban) {
+        return jdbc.queryForObject("SELECT balance FROM accounts WHERE iban = ?", BigDecimal.class, iban);
+    }
+
+    protected int countRows(String table) {
+        return JdbcTestUtils.countRowsInTable(jdbc, table);
+    }
+
+    /** Accounts customers opened: the bank's own accounts are always there. */
+    protected int countCustomerAccounts() {
+        return JdbcTestUtils.countRowsInTableWhere(jdbc, "accounts", "kind = 'CUSTOMER'");
+    }
+}

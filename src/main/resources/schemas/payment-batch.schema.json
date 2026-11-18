@@ -1,0 +1,81 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Payment batch",
+  "description": "One debtor account paying several creditors. Field limits follow ISO 20022 (Max35Text, Max140Text).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "messageId",
+    "debtorIban",
+    "payments"
+  ],
+  "properties": {
+    "messageId": {
+      "$ref": "#/$defs/max35Id"
+    },
+    "debtorIban": {
+      "$ref": "#/$defs/iban"
+    },
+    "payments": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": {
+        "$ref": "#/$defs/payment"
+      }
+    }
+  },
+  "$defs": {
+    "max35Id": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 35,
+      "pattern": "^[A-Za-z0-9-]+$"
+    },
+    "iban": {
+      "type": "string",
+      "pattern": "^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$"
+    },
+    "payment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "endToEndId",
+        "creditorIban",
+        "creditorName",
+        "amount",
+        "currency"
+      ],
+      "properties": {
+        "endToEndId": {
+          "$ref": "#/$defs/max35Id"
+        },
+        "creditorIban": {
+          "$ref": "#/$defs/iban"
+        },
+        "creditorName": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "amount": {
+          "type": "number",
+          "exclusiveMinimum": 0,
+          "maximum": 1000000000
+        },
+        "currency": {
+          "enum": [
+            "UAH",
+            "USD",
+            "EUR"
+          ]
+        },
+        "remittanceInfo": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        }
+      }
+    }
+  }
+}

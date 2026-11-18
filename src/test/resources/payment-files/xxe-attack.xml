@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE Document [
+  <!ENTITY secret SYSTEM "file:///etc/passwd">
+]>
+<Document xmlns="urn:bank-core:pain.001.simplified">
+  <CstmrCdtTrfInitn>
+    <GrpHdr>
+      <MsgId>&secret;</MsgId>
+      <CreDtTm>2026-11-09T10:00:00</CreDtTm>
+      <NbOfTxs>1</NbOfTxs>
+      <CtrlSum>1.00</CtrlSum>
+    </GrpHdr>
+    <PmtInf>
+      <DbtrAcct>
+        <IBAN>UA843999990000000000000000001</IBAN>
+      </DbtrAcct>
+      <CdtTrfTxInf>
+        <PmtId>
+          <EndToEndId>E2E-1</EndToEndId>
+        </PmtId>
+        <Amt>
+          <InstdAmt Ccy="UAH">1.00</InstdAmt>
+        </Amt>
+        <Cdtr>
+          <Nm>Attacker</Nm>
+        </Cdtr>
+        <CdtrAcct>
+          <IBAN>UA573999990000000000000000002</IBAN>
+        </CdtrAcct>
+      </CdtTrfTxInf>
+    </PmtInf>
+  </CstmrCdtTrfInitn>
+</Document>

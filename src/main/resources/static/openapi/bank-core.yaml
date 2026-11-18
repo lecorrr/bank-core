@@ -1,0 +1,491 @@
+openapi: 3.0.3
+info:
+  title: Bank Core API
+  version: 0.3.0
+  description: |
+    Accounts, transfers and payment files for a small digital bank.
+    This file is the contract: the Spring interfaces and DTOs are generated from it at build time.
+    Errors use RFC 9457 problem details with an extra `code` field (see the Problem schema).
+servers:
+  - url: /
+tags:
+  - name: Accounts
+    description: Open accounts, deposit money, read balances and statements
+  - name: Transfers
+    description: >-
+      Move money to an account in this bank or in another Ukrainian bank, safely repeatable with an
+      Idempotency-Key
+  - name: PaymentBatches
+    description: Upload payment files (JSON, or XML in a simplified ISO 20022 pain.001)
+
+paths:
+  /api/v1/accounts:
+    get:
+      tags: [Accounts]
+      operationId: listAccounts
+      summary: List all accounts in the order they were opened
+      responses:
+        '200':
+          description: All accounts
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountResponse'
+    post:
+      tags: [Accounts]
+      operationId: openAccount
+      summary: Open an account with a zero balance
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OpenAccountRequest'
+      responses:
+        '201':
+          description: Account opened
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/accounts/{iban}:
+    get:
+      tags: [Accounts]
+      operationId: getAccount
+      summary: Get one account with its current balance
+      parameters:
+        - $ref: '#/components/parameters/Iban'
+      responses:
+        '200':
+          description: The account
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/accounts/{iban}/deposits:
+    post:
+      tags: [Accounts]
+      operationId: depositToAccount
+      summary: Deposit cash into an account
+      parameters:
+        - $ref: '#/components/parameters/Iban'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DepositRequest'
+      responses:
+        '200':
+          description: The account after the deposit
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/accounts/{iban}/statement:
+    get:
+      tags: [Accounts]
+      operationId: getAccountStatement
+      summary: Every ledger entry of the account, oldest first
+      parameters:
+        - $ref: '#/components/parameters/Iban'
+      responses:
+        '200':
+          description: The statement
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatementResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/transfers:
+    post:
+      tags: [Transfers]
+      operationId: createTransfer
+      summary: Move money from one account to another
+      description: |
+        Repeating a request with the same Idempotency-Key returns the original transfer (200)
+        instead of paying twice. The same key with a different body is a 409.
+
+        Within this bank the transfer is COMPLETED at once. To an IBAN of another Ukrainian bank it needs
+        `toName` and UAH, and starts PENDING: the money has left the payer's account and goes to that bank
+        as an ISO 20022 payment. Its status becomes COMPLETED when that bank accepts it, or REJECTED when it
+        refuses, and then the money is back on the payer's account. IBANs outside Ukraine are refused.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TransferRequest'
+      responses:
+        '201':
+          description: Transfer made, COMPLETED within this bank or PENDING for another bank
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '200':
+          description: Replay of an earlier request with the same Idempotency-Key
+          headers:
+            Idempotent-Replayed:
+              description: Always "true" on a replay
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '404':
+          $ref: '#/components/responses/Problem'
+        '409':
+          $ref: '#/components/responses/Problem'
+        '422':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/transfers/{transferId}:
+    get:
+      tags: [Transfers]
+      operationId: getTransfer
+      summary: Get one transfer
+      parameters:
+        - name: transferId
+          in: path
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: The transfer
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TransferResponse'
+        '404':
+          $ref: '#/components/responses/Problem'
+
+  /api/v1/payment-batches:
+    post:
+      tags: [PaymentBatches]
+      operationId: uploadPaymentBatch
+      summary: Upload a payment file and execute every payment in it
+      description: |
+        The whole file is validated first (JSON Schema or XSD); an invalid file is rejected with every
+        problem listed and nothing is paid. Each payment then runs as its own transfer with the
+        Idempotency-Key "<messageId>:<endToEndId>", so uploading the same file twice pays only once.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file:
+                  type: string
+                  format: binary
+                  description: A .json file (payment-batch.schema.json) or a .xml file (pain001-simplified.xsd)
+      responses:
+        '200':
+          description: The file was valid; each item says whether it was paid
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaymentBatchResult'
+        '400':
+          $ref: '#/components/responses/Problem'
+        '415':
+          $ref: '#/components/responses/Problem'
+
+components:
+  parameters:
+    Iban:
+      name: iban
+      in: path
+      required: true
+      schema:
+        type: string
+        minLength: 15
+        maxLength: 34
+        example: UA843999990000000000000000001
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: Unique per payment. Generate one per user action and reuse it for retries.
+      schema:
+        type: string
+        minLength: 1
+        maxLength: 100
+        example: 7f6c2a5e-3c1d-4b8e-9f0a-1d2e3f4a5b6c
+
+  responses:
+    Problem:
+      description: Error described as RFC 9457 problem details
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Currency:
+      type: string
+      enum: [UAH, USD, EUR]
+
+    OpenAccountRequest:
+      type: object
+      required: [iban, holderName, currency]
+      properties:
+        iban:
+          type: string
+          minLength: 15
+          maxLength: 42
+          description: Spaces and lower case are accepted and normalised
+          example: UA21 3223 1300 0002 6007 2335 6600 1
+        holderName:
+          type: string
+          minLength: 1
+          maxLength: 140
+          example: Artem Tkachuk
+        currency:
+          $ref: '#/components/schemas/Currency'
+
+    DepositRequest:
+      type: object
+      required: [amount]
+      properties:
+        amount:
+          type: number
+          minimum: 0.01
+          maximum: 1000000000
+          example: 1000.00
+        description:
+          type: string
+          maxLength: 140
+          example: Cash deposit
+
+    AccountResponse:
+      type: object
+      required: [iban, holderName, currency, balance, createdAt]
+      properties:
+        iban:
+          type: string
+          example: UA843999990000000000000000001
+        holderName:
+          type: string
+        currency:
+          $ref: '#/components/schemas/Currency'
+        balance:
+          type: number
+          example: 850.00
+        createdAt:
+          type: string
+          format: date-time
+
+    TransferRequest:
+      type: object
+      required: [fromIban, toIban, amount, currency, description]
+      properties:
+        fromIban:
+          type: string
+          minLength: 15
+          maxLength: 34
+          example: UA843999990000000000000000001
+        toIban:
+          type: string
+          minLength: 15
+          maxLength: 34
+          example: UA573999990000000000000000002
+        toName:
+          type: string
+          maxLength: 140
+          pattern: '.*\S.*'
+          description: >-
+            The payee's name. Required for a transfer to another bank, whose payment message carries it;
+            optional within this bank.
+          example: Olena Kovalenko
+        amount:
+          type: number
+          minimum: 0.01
+          maximum: 1000000000
+          example: 150.00
+        currency:
+          $ref: '#/components/schemas/Currency'
+        description:
+          type: string
+          minLength: 1
+          maxLength: 140
+          pattern: '.*\S.*'
+          example: Rent for November
+
+    TransferResponse:
+      type: object
+      required: [id, fromIban, toIban, amount, currency, description, status, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+        fromIban:
+          type: string
+        toIban:
+          type: string
+        toName:
+          type: string
+          nullable: true
+        amount:
+          type: number
+        currency:
+          $ref: '#/components/schemas/Currency'
+        description:
+          type: string
+        status:
+          type: string
+          enum: [PENDING, COMPLETED, REJECTED]
+          description: >-
+            PENDING while another bank has not answered yet; REJECTED when it refused, and the money went back
+        createdAt:
+          type: string
+          format: date-time
+
+    StatementEntryResponse:
+      type: object
+      required: [id, type, direction, amount, balanceAfter, description, createdAt]
+      properties:
+        id:
+          type: integer
+          format: int64
+        type:
+          type: string
+          enum: [DEPOSIT, TRANSFER, SETTLEMENT, REVERSAL]
+          description: >-
+            REVERSAL gives back the money of a transfer another bank refused. SETTLEMENT entries belong to the
+            bank's own accounts and never appear on a customer's statement.
+        direction:
+          type: string
+          enum: [DEBIT, CREDIT]
+        transferId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Set for the entries of a transfer, empty for deposits
+        amount:
+          type: number
+        balanceAfter:
+          type: number
+        description:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+
+    StatementResponse:
+      type: object
+      required: [iban, currency, balance, entries]
+      properties:
+        iban:
+          type: string
+        currency:
+          $ref: '#/components/schemas/Currency'
+        balance:
+          type: number
+        entries:
+          type: array
+          items:
+            $ref: '#/components/schemas/StatementEntryResponse'
+
+    PaymentBatchResult:
+      type: object
+      required: [messageId, format, total, accepted, rejected, items]
+      properties:
+        messageId:
+          type: string
+        format:
+          type: string
+          enum: [JSON, XML]
+        total:
+          type: integer
+          format: int32
+        accepted:
+          type: integer
+          format: int32
+        rejected:
+          type: integer
+          format: int32
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PaymentBatchItemResult'
+
+    PaymentBatchItemResult:
+      type: object
+      required: [endToEndId, status, replayed]
+      properties:
+        endToEndId:
+          type: string
+        status:
+          type: string
+          enum: [ACCEPTED, REJECTED]
+        transferId:
+          type: string
+          format: uuid
+          nullable: true
+        replayed:
+          type: boolean
+          description: True when this payment had already been made by an earlier upload
+        errorCode:
+          type: string
+          nullable: true
+          example: INSUFFICIENT_FUNDS
+        reason:
+          type: string
+          nullable: true
+
+    Problem:
+      type: object
+      description: RFC 9457 problem details plus a machine-readable code
+      properties:
+        type:
+          type: string
+          example: urn:bank-core:error:insufficient-funds
+        title:
+          type: string
+          example: Insufficient funds
+        status:
+          type: integer
+          format: int32
+          example: 422
+        detail:
+          type: string
+        instance:
+          type: string
+        code:
+          type: string
+          description: >-
+            Machine-readable reason: a business error code such as INSUFFICIENT_FUNDS,
+            VALIDATION_FAILED for a request that breaks this contract, or INTERNAL_ERROR
+          example: INSUFFICIENT_FUNDS
+        violations:
+          type: array
+          description: Every problem found, for validation errors and invalid payment files
+          items:
+            type: string
