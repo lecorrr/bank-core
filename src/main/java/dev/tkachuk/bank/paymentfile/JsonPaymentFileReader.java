@@ -16,6 +16,7 @@ import com.networknt.schema.ValidationMessage;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -32,9 +33,10 @@ public class JsonPaymentFileReader implements PaymentFileReader {
     static final String SCHEMA_RESOURCE = "/schemas/payment-batch.schema.json";
 
     /**
-     * Amounts become BigDecimal straight from the text, written as in the file: through a double, 200.50 would
-     * already be 200.499999... A key given twice is an error instead of "the last one wins", because a payment
-     * file must not be ambiguous about an amount or an account; so is anything after the JSON document.
+     * Amounts become BigDecimal straight from the text, written as in the file: a double holds most decimal
+     * fractions only approximately (19.99 is 19.98999...). A key given twice is an error instead of "the last one
+     * wins", because a payment file must not be ambiguous about an amount or an account; so is anything after the
+     * JSON document.
      */
     private static final ObjectMapper JSON = JsonMapper.builder()
             .enable(DeserializationFeature.USE_BIG_DECIMAL_FOR_FLOATS)
@@ -61,13 +63,31 @@ public class JsonPaymentFileReader implements PaymentFileReader {
             throw new InvalidPaymentFileException(violations);
         }
         PaymentBatch batch = toBatch(file);
-        List<String> repeated = batch.repeatedEndToEndIds();
-        if (!repeated.isEmpty()) {
-            throw new InvalidPaymentFileException(repeated.stream()
-                    .map(id -> "$.payments: endToEndId " + id + " is used by more than one payment")
-                    .toList());
+        List<String> ruleViolations = new ArrayList<>(amountsWithMoreThanTwoDecimals(batch));
+        for (String id : batch.repeatedEndToEndIds()) {
+            ruleViolations.add("$.payments: endToEndId " + id + " is used by more than one payment");
+        }
+        if (!ruleViolations.isEmpty()) {
+            throw new InvalidPaymentFileException(ruleViolations);
         }
         return batch;
+    }
+
+    /**
+     * The XML schema refuses a third decimal (fractionDigits 2); JSON Schema has no such rule, so it is checked
+     * here, by value: 10.500 is 10.50 and passes, 10.555 does not.
+     */
+    private static List<String> amountsWithMoreThanTwoDecimals(PaymentBatch batch) {
+        List<String> violations = new ArrayList<>();
+        List<PaymentInstruction> payments = batch.payments();
+        for (int i = 0; i < payments.size(); i++) {
+            BigDecimal amount = payments.get(i).amount();
+            if (amount.stripTrailingZeros().scale() > 2) {
+                violations.add("$.payments[" + i + "].amount: " + amount.toPlainString()
+                        + " has more than two decimals");
+            }
+        }
+        return violations;
     }
 
     private static JsonNode parse(InputStream content) {

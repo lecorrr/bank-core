@@ -94,13 +94,19 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(status).body(problem);
     }
 
+    /**
+     * 409 says the request clashes with the current state, such as rows another request is changing. A reused
+     * Idempotency-Key is a mistake in the request itself and can never succeed, so it is a 422, as the IETF draft
+     * for the Idempotency-Key header recommends.
+     */
     static HttpStatusCode statusOf(ErrorCode code) {
         int status = switch (code) {
             case ACCOUNT_NOT_FOUND, TRANSFER_NOT_FOUND -> 404;
-            case ACCOUNT_ALREADY_EXISTS, IDEMPOTENCY_KEY_REUSED, CONFLICT -> 409;
+            case ACCOUNT_ALREADY_EXISTS, CONFLICT -> 409;
             case INVALID_IBAN, INVALID_AMOUNT, INVALID_PAYMENT_FILE, BENEFICIARY_NAME_REQUIRED -> 400;
             case UNSUPPORTED_FILE_FORMAT -> 415;
-            case SAME_ACCOUNT, CURRENCY_MISMATCH, INSUFFICIENT_FUNDS, UNSUPPORTED_DESTINATION -> 422;
+            case SAME_ACCOUNT, CURRENCY_MISMATCH, INSUFFICIENT_FUNDS, UNSUPPORTED_DESTINATION,
+                 IDEMPOTENCY_KEY_REUSED -> 422;
         };
         return HttpStatusCode.valueOf(status);
     }

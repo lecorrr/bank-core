@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Bank Core API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Accounts, transfers and payment files for a small digital bank.
     This file is the contract: the Spring interfaces and DTOs are generated from it at build time.
@@ -121,7 +121,9 @@ paths:
       summary: Move money from one account to another
       description: |
         Repeating a request with the same Idempotency-Key returns the original transfer (200)
-        instead of paying twice. The same key with a different body is a 409.
+        instead of paying twice. The same key with a different body is refused with a 422
+        (IDEMPOTENCY_KEY_REUSED): it can never succeed, so do not retry it. A 409 (CONFLICT) means another
+        request was changing the same accounts; retry it with the same key.
 
         Within this bank the transfer is COMPLETED at once. To an IBAN of another Ukrainian bank it needs
         `toName` and UAH, and starts PENDING: the money has left the payer's account and goes to that bank

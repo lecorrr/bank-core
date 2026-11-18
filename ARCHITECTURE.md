@@ -44,9 +44,10 @@ upload -> PaymentBatchesController -> PaymentBatchService
 ```
 
 The whole file is validated before the first payment: against its schema (JSON Schema, or the XSD by a parser
-that refuses any DOCTYPE, so no XXE), then for what a schema cannot say: unique end-to-end ids and, in XML, the
-group header's transaction count and control sum. Then each payment is its own transaction, so one payment
-without money does not undo the others, and uploading the file again pays nothing twice.
+that refuses any DOCTYPE, so no XXE), then for what a schema cannot say: unique end-to-end ids, in JSON at most
+two decimals per amount (the XSD says that for XML), and in XML the group header's transaction count and control
+sum. Then each payment is its own transaction, so one payment without money does not undo the others, and
+uploading the file again pays nothing twice.
 
 A transfer to another bank (an IBAN whose bank code is not `bank.code`):
 

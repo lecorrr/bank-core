@@ -4,7 +4,7 @@ A small core-banking service: customer accounts, deposits, money transfers withi
 Ukrainian banks, and bulk payment files in JSON or ISO 20022 XML. Transfers to other banks go through
 [bank-integration](https://github.com/lecorrr/bank-integration), which carries them as ISO 20022 messages.
 
-**Status: 0.3.0.** Everything listed below is in place, and every build checks it with unit and integration
+**Status: 0.4.0.** Everything listed below is in place, and every build checks it with unit and integration
 tests and an 80 % line-coverage gate.
 
 What it covers:
@@ -67,7 +67,7 @@ Or run both in Docker; build the jar first:
 docker compose up --build
 ```
 
-Once it is up, the log says which build is running (`bank-core 0.3.0 started`). Swagger UI is at
+Once it is up, the log says which build is running (`bank-core 0.4.0 started`). Swagger UI is at
 <http://localhost:8080/swagger-ui.html> and health at <http://localhost:8080/actuator/health>.
 
 Transfers to other banks need bank-integration's stack, which has the Kafka bank-core talks to

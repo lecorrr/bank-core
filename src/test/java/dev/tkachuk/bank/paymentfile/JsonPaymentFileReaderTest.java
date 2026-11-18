@@ -30,7 +30,7 @@ class JsonPaymentFileReaderTest {
         assertThat(first.remittanceInfo()).isEqualTo("Invoice 17");
         PaymentInstruction second = batch.payments().get(1);
         assertThat(second.endToEndId()).isEqualTo("E2E-2");
-        // 200.50 must arrive exactly: reading it as a double first is how cents get lost.
+        // Read as the decimal written in the file, never through a double.
         assertThat(second.amount()).isEqualByComparingTo("200.50");
         assertThat(second.remittanceInfo()).isNull();
     }
@@ -51,6 +51,32 @@ class JsonPaymentFileReaderTest {
         assertThat(String.join("\n", violations))
                 .as("each violation names its field")
                 .contains("priority", "creditorIban", "amount", "creditorName", "currency");
+    }
+
+    /** The XML schema refuses this too: a third decimal would have to be rounded away, and money is never rounded. */
+    @Test
+    void refusesAnAmountWithMoreThanTwoDecimals() {
+        String thirdDecimal = """
+                {"messageId": "MSG-1", "debtorIban": "%s", "payments": [
+                  {"endToEndId": "E2E-1", "creditorIban": "%s", "creditorName": "Olena Kovalenko",
+                   "amount": 150.00, "currency": "UAH"},
+                  {"endToEndId": "E2E-2", "creditorIban": "%s", "creditorName": "Olena Kovalenko",
+                   "amount": 10.555, "currency": "UAH"}]}
+                """.formatted(TestIbans.A, TestIbans.B, TestIbans.B);
+
+        assertThat(violationsOf(json(thirdDecimal)))
+                .containsExactly("$.payments[1].amount: 10.555 has more than two decimals");
+    }
+
+    @Test
+    void acceptsTrailingZerosAfterTheSecondDecimal() {
+        String trailingZero = """
+                {"messageId": "MSG-1", "debtorIban": "%s", "payments": [
+                  {"endToEndId": "E2E-1", "creditorIban": "%s", "creditorName": "Olena Kovalenko",
+                   "amount": 10.500, "currency": "UAH"}]}
+                """.formatted(TestIbans.A, TestIbans.B);
+
+        assertThat(reader.read(json(trailingZero)).payments().getFirst().amount()).isEqualByComparingTo("10.50");
     }
 
     @Test

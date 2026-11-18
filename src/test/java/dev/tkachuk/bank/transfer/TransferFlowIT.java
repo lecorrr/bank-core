@@ -77,7 +77,7 @@ class TransferFlowIT extends IntegrationTest {
         mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "150.00")).andExpect(status().isCreated());
 
         mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "999.00"))
-                .andExpect(status().isConflict())
+                .andExpect(status().is(422))
                 .andExpect(jsonPath("$.code").value("IDEMPOTENCY_KEY_REUSED"));
 
         assertThat(balanceOf(TestIbans.A)).isEqualByComparingTo("850.00");
@@ -103,6 +103,23 @@ class TransferFlowIT extends IntegrationTest {
         assertThat(balanceOf(TestIbans.B)).isEqualByComparingTo("0.00");
         assertThat(countRows("transfers")).isZero();
         assertThat(countRows("ledger_entries")).isZero();
+    }
+
+    /** PostgreSQL keeps microseconds, so an answer with nanoseconds would not match the row read back later. */
+    @Test
+    void theCreationTimeReadsBackAsItWasAnswered() throws Exception {
+        String created = mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "150.00"))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+        String transferId = JsonPath.read(created, "$.id");
+
+        String readBack = mockMvc.perform(get("/api/v1/transfers/{id}", transferId))
+                .andExpect(status().isOk())
+                .andReturn().getResponse().getContentAsString();
+
+        Object answered = JsonPath.read(created, "$.createdAt");
+        Object stored = JsonPath.read(readBack, "$.createdAt");
+        assertThat(stored).isEqualTo(answered);
     }
 
     @Test

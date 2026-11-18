@@ -27,6 +27,7 @@ class PaymentBatchIT extends IntegrationTest {
         insertAccount(TestIbans.B, "Olena Kovalenko", "UAH", "0.00");
         insertAccount(TestIbans.C, "Supplier LLC", "UAH", "0.00");
     }
+
     @Test
     void aJsonFilePaysEveryInstruction() throws Exception {
         mockMvc.perform(upload("valid-batch.json", "application/json"))
@@ -41,6 +42,7 @@ class PaymentBatchIT extends IntegrationTest {
 
         assertPaid();
     }
+
     @Test
     void anXmlFilePaysEveryInstruction() throws Exception {
         mockMvc.perform(upload("valid-batch.xml", "application/xml"))
@@ -51,6 +53,7 @@ class PaymentBatchIT extends IntegrationTest {
 
         assertPaid();
     }
+
     @Test
     void uploadingTheSameFileAgainPaysNothingTwice() throws Exception {
         mockMvc.perform(upload("valid-batch.json", "application/json")).andExpect(status().isOk());
@@ -62,6 +65,7 @@ class PaymentBatchIT extends IntegrationTest {
 
         assertPaid();
     }
+
     @Test
     void aPaymentWithoutMoneyIsRefusedAndTheOthersStillGo() throws Exception {
         jdbc.update("UPDATE accounts SET balance = 160.00 WHERE iban = ?", TestIbans.A);
@@ -78,6 +82,7 @@ class PaymentBatchIT extends IntegrationTest {
         assertThat(balanceOf(TestIbans.B)).isEqualByComparingTo("150.00");
         assertThat(balanceOf(TestIbans.C)).isEqualByComparingTo("0.00");
     }
+
     @Test
     void anInvalidFileIsRefusedAsAWholeAndPaysNothing() throws Exception {
         mockMvc.perform(upload("invalid-schema.json", "application/json"))
@@ -87,6 +92,18 @@ class PaymentBatchIT extends IntegrationTest {
 
         assertThat(countRows("transfers")).isZero();
     }
+
+    /** One amount has a third decimal, so nothing is paid, not even the valid payment before it. */
+    @Test
+    void aJsonAmountWithThreeDecimalsPaysNothing() throws Exception {
+        mockMvc.perform(upload("three-decimals.json", "application/json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_PAYMENT_FILE"))
+                .andExpect(jsonPath("$.violations", hasSize(1)));
+
+        assertThat(countRows("transfers")).isZero();
+    }
+
     @Test
     void anXmlFileWithExternalEntitiesIsRefused() throws Exception {
         mockMvc.perform(upload("xxe-attack.xml", "application/xml"))
