@@ -13,11 +13,10 @@ import java.util.Locale;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 
-/** Reading accounts and depositing money, through HTTP and a real database. */
 class AccountFlowIT extends IntegrationTest {
 
     @Test
-    void returnsAnExistingAccount() throws Exception {
+    void shouldReturnExistingAccount() throws Exception {
         insertAccount(TestIbans.A, "Artem Demo", "UAH", "1000.00");
 
         mockMvc.perform(get("/api/v1/accounts/{iban}", TestIbans.A))
@@ -29,7 +28,7 @@ class AccountFlowIT extends IntegrationTest {
     }
 
     @Test
-    void lookupAcceptsLowerCase() throws Exception {
+    void shouldFindAccountByLowerCaseIban() throws Exception {
         insertAccount(TestIbans.A, "Artem Demo", "UAH", "1000.00");
 
         mockMvc.perform(get("/api/v1/accounts/{iban}", TestIbans.A.toLowerCase(Locale.ROOT)))
@@ -38,14 +37,14 @@ class AccountFlowIT extends IntegrationTest {
     }
 
     @Test
-    void unknownAccountIsNotFound() throws Exception {
+    void shouldReturn404ForUnknownAccount() throws Exception {
         mockMvc.perform(get("/api/v1/accounts/{iban}", TestIbans.UNKNOWN))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("ACCOUNT_NOT_FOUND"));
     }
 
     @Test
-    void depositChangesTheBalanceAndAppearsOnTheStatement() throws Exception {
+    void shouldDepositAndShowItOnStatement() throws Exception {
         insertAccount(TestIbans.A, "Artem Demo", "UAH", "1000.00");
 
         mockMvc.perform(post("/api/v1/accounts/{iban}/deposits", TestIbans.A)
@@ -64,12 +63,11 @@ class AccountFlowIT extends IntegrationTest {
                 .andExpect(jsonPath("$.entries[0].amount").value(250.5))
                 .andExpect(jsonPath("$.entries[0].balanceAfter").value(1250.5))
                 .andExpect(jsonPath("$.entries[0].description").value("Salary"))
-                // A deposit belongs to no transfer (null or absent both pass doesNotExist).
                 .andExpect(jsonPath("$.entries[0].transferId").doesNotExist());
     }
 
     @Test
-    void depositWithoutDescriptionGetsADefaultOne() throws Exception {
+    void shouldUseDefaultDescriptionForDeposit() throws Exception {
         insertAccount(TestIbans.A, "Artem Demo", "UAH", "0.00");
 
         mockMvc.perform(post("/api/v1/accounts/{iban}/deposits", TestIbans.A)
@@ -82,7 +80,7 @@ class AccountFlowIT extends IntegrationTest {
     }
 
     @Test
-    void depositWithThreeDecimalsIsRefusedAndChangesNothing() throws Exception {
+    void shouldRejectDepositWithThreeDecimals() throws Exception {
         insertAccount(TestIbans.A, "Artem Demo", "UAH", "1000.00");
 
         mockMvc.perform(post("/api/v1/accounts/{iban}/deposits", TestIbans.A)
@@ -96,7 +94,7 @@ class AccountFlowIT extends IntegrationTest {
     }
 
     @Test
-    void depositToAnUnknownAccountIsNotFound() throws Exception {
+    void shouldReturn404ForDepositToUnknownAccount() throws Exception {
         mockMvc.perform(post("/api/v1/accounts/{iban}/deposits", TestIbans.UNKNOWN)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"amount\": 10}"))
@@ -107,7 +105,7 @@ class AccountFlowIT extends IntegrationTest {
     }
 
     @Test
-    void accountsAreListedInTheOrderTheyWereOpened() throws Exception {
+    void shouldListAccountsInOpeningOrder() throws Exception {
         insertAccount(TestIbans.B, "Olena Kovalenko", "UAH", "0.00");
         insertAccount(TestIbans.A, "Artem Demo", "UAH", "0.00");
 

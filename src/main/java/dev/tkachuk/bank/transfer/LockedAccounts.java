@@ -6,12 +6,7 @@ import dev.tkachuk.bank.common.error.BankException;
 import dev.tkachuk.bank.common.error.ErrorCode;
 import java.util.Optional;
 
-/**
- * The two accounts of one movement of money, locked (SELECT ... FOR UPDATE) until the transaction ends. The smaller
- * IBAN is always locked first, whatever the direction: A-to-B and B-to-A at the same moment would otherwise each lock
- * one row and wait for the other, a deadlock. Every movement between two accounts locks through here, so they all
- * keep the same order.
- */
+/** Locks two accounts, the smaller IBAN first, so transfers in opposite directions can't deadlock. */
 record LockedAccounts(Account from, Account to) {
 
     static LockedAccounts lock(AccountRepository accounts, String fromIban, String toIban) {
@@ -21,10 +16,6 @@ record LockedAccounts(Account from, Account to) {
         return fromIsSmaller ? new LockedAccounts(first, second) : new LockedAccounts(second, first);
     }
 
-    /**
-     * Locks the two accounts in the same order as lock(), but either may be missing: a payment from another bank
-     * can name an account this bank does not keep. A row that does not exist is not locked.
-     */
     static Found lockIfPresent(AccountRepository accounts, String fromIban, String toIban) {
         boolean fromIsSmaller = fromIban.compareTo(toIban) < 0;
         Optional<Account> first = accounts.findByIbanForUpdate(fromIsSmaller ? fromIban : toIban);
@@ -32,7 +23,6 @@ record LockedAccounts(Account from, Account to) {
         return fromIsSmaller ? new Found(first, second) : new Found(second, first);
     }
 
-    /** The accounts lockIfPresent() found, each locked, or empty when there is none with that IBAN. */
     record Found(Optional<Account> from, Optional<Account> to) {
     }
 

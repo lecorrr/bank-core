@@ -17,7 +17,7 @@ import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.testcontainers.kafka.KafkaContainer;
 
-/** Kafka as bank-integration uses it in the integration tests: it publishes JSON text, and reads bank-core's events. */
+/** Publishes and reads Kafka events the way bank-integration does. */
 public final class KafkaEvents {
 
     private final KafkaContainer kafka;
@@ -36,18 +36,14 @@ public final class KafkaEvents {
         }
     }
 
-    /** The first event whose text contains this id; fails when none comes within the timeout. */
     public ConsumerRecord<String, String> eventAbout(String topic, String id) {
         return eventsAbout(topic, id, 1).getFirst();
     }
 
-    /**
-     * The first events whose text contains this id, as many as asked for, read from the start of the topic in a
-     * consumer group of its own; fails when fewer come within the timeout.
-     */
     public List<ConsumerRecord<String, String>> eventsAbout(String topic, String id, int count) {
         Map<String, Object> config = Map.of(
                 ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers(),
+                // A new group every time, so each call reads the topic from the start.
                 ConsumerConfig.GROUP_ID_CONFIG, "test-" + UUID.randomUUID(),
                 ConsumerConfig.AUTO_OFFSET_RESET_CONFIG, "earliest");
         List<ConsumerRecord<String, String>> found = new ArrayList<>();

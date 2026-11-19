@@ -9,7 +9,6 @@ import org.junit.jupiter.params.provider.EnumSource;
 
 class ApiExceptionHandlerTest {
 
-    /** The whole table, so changing a status is a deliberate edit here too. */
     @ParameterizedTest(name = "{0} is {1}")
     @CsvSource({
             "ACCOUNT_NOT_FOUND, 404",
@@ -26,14 +25,13 @@ class ApiExceptionHandlerTest {
             "INSUFFICIENT_FUNDS, 422",
             "UNSUPPORTED_DESTINATION, 422",
             "IDEMPOTENCY_KEY_REUSED, 422"})
-    void answersEachErrorCodeWithItsStatus(ErrorCode code, int status) {
+    void shouldMapEachErrorCodeToItsStatus(ErrorCode code, int status) {
         assertThat(ApiExceptionHandler.statusOf(code).value()).isEqualTo(status);
     }
 
-    /** A business error is the caller's to fix; a 500 is kept for bugs. */
     @ParameterizedTest
     @EnumSource(ErrorCode.class)
-    void answersEveryErrorCodeWithAClientError(ErrorCode code) {
+    void shouldMapEveryErrorCodeToClientError(ErrorCode code) {
         assertThat(ApiExceptionHandler.statusOf(code).is4xxClientError()).isTrue();
     }
 }

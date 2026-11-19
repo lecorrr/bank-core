@@ -29,14 +29,7 @@ import org.xml.sax.SAXException;
 import org.xml.sax.SAXParseException;
 import org.xml.sax.XMLReader;
 
-/**
- * Reads simplified ISO 20022 pain.001 XML files, validated against /schemas/pain001-simplified.xsd.
- *
- * <p>The file is validated first, by a parser that refuses any DOCTYPE, so no entity can ever be expanded:
- * that rules out XXE (an entity that reads a local file or calls another server) and "billion laughs" (entities
- * that expand to gigabytes). Only a valid file is then read, with StAX, and checked for what XSD 1.0 cannot
- * express: the totals in the group header and unique end-to-end ids.
- */
+/** Reads simplified pain.001 XML. DOCTYPE is refused, so there's no XXE or entity expansion. */
 @Component
 public class XmlPaymentFileReader implements PaymentFileReader {
 
@@ -47,7 +40,6 @@ public class XmlPaymentFileReader implements PaymentFileReader {
     private final Schema schema = loadSchema();
 
     public XmlPaymentFileReader() {
-        // Fails at startup, not on the first upload, if this JDK's parser cannot be made safe.
         newSafeXmlReader();
     }
 
@@ -58,7 +50,6 @@ public class XmlPaymentFileReader implements PaymentFileReader {
 
     @Override
     public PaymentBatch read(InputStream content) {
-        // Uploads are limited to 5 MB, so the file is read once and then validated and parsed from memory.
         byte[] file = readAll(content);
         List<String> violations = validate(file);
         if (!violations.isEmpty()) {
@@ -73,14 +64,12 @@ public class XmlPaymentFileReader implements PaymentFileReader {
         return batch;
     }
 
-    /** XSD validation, collecting every error with its line and column. */
     private List<String> validate(byte[] file) {
         List<String> violations = new ArrayList<>();
         Validator validator = schema.newValidator();
         validator.setErrorHandler(new ErrorHandler() {
             @Override
             public void warning(SAXParseException e) {
-                // Warnings are not violations.
             }
 
             @Override
@@ -90,7 +79,6 @@ public class XmlPaymentFileReader implements PaymentFileReader {
 
             @Override
             public void fatalError(SAXParseException e) throws SAXParseException {
-                // The parser cannot go on after a fatal error (not XML at all, or a DOCTYPE): stop here.
                 throw e;
             }
         });
@@ -101,20 +89,16 @@ public class XmlPaymentFileReader implements PaymentFileReader {
         } catch (SAXException e) {
             violations.add("The file is not readable XML: " + e.getMessage());
         } catch (IOException e) {
-            // Reading from memory, so this is about the bytes themselves, such as an invalid encoding.
             violations.add("The file cannot be read as XML: " + e.getMessage());
         }
         return violations;
     }
 
-    /** Runs only on a file the schema accepted, so every element it needs is there and well formed. */
     private static ParsedFile parse(byte[] file) {
         XMLInputFactory factory = XMLInputFactory.newFactory();
         factory.setProperty(XMLInputFactory.SUPPORT_DTD, false);
         factory.setProperty(XMLInputFactory.IS_SUPPORTING_EXTERNAL_ENTITIES, false);
         ParsedFile parsed = new ParsedFile();
-        // The names of the open elements, innermost first: an IBAN is the debtor's under DbtrAcct and the
-        // payment's under CdtrAcct.
         Deque<String> open = new ArrayDeque<>();
         PaymentFields payment = new PaymentFields();
         try {
@@ -126,7 +110,6 @@ public class XmlPaymentFileReader implements PaymentFileReader {
                     String element = xml.getLocalName();
                     open.push(element);
                     readElement(xml, element, parent, parsed, payment);
-                    // Reading an element's text moves the reader to its end tag, which is then not seen below.
                     if (xml.getEventType() == XMLStreamConstants.END_ELEMENT) {
                         open.pop();
                     }
@@ -169,7 +152,6 @@ public class XmlPaymentFileReader implements PaymentFileReader {
             }
             case "Ustrd" -> payment.remittanceInfo = text(xml);
             default -> {
-                // A container element: its children are read when the reader gets to them.
             }
         }
     }
@@ -178,7 +160,6 @@ public class XmlPaymentFileReader implements PaymentFileReader {
         return xml.getElementText().strip();
     }
 
-    /** What the schema cannot express: the totals in the header and unique end-to-end ids. */
     private static List<String> checkRules(ParsedFile parsed, PaymentBatch batch) {
         List<String> violations = new ArrayList<>();
         int count = batch.payments().size();
@@ -199,7 +180,6 @@ public class XmlPaymentFileReader implements PaymentFileReader {
         return violations;
     }
 
-    /** A namespace-aware SAX parser that refuses any DOCTYPE, for the validator to read the file with. */
     private static XMLReader newSafeXmlReader() {
         try {
             SAXParserFactory factory = SAXParserFactory.newInstance();
@@ -231,7 +211,6 @@ public class XmlPaymentFileReader implements PaymentFileReader {
             }
             SchemaFactory factory = SchemaFactory.newInstance(XMLConstants.W3C_XML_SCHEMA_NS_URI);
             factory.setFeature(XMLConstants.FEATURE_SECURE_PROCESSING, true);
-            // The schema is self-contained: it may not pull in anything from outside.
             factory.setProperty(XMLConstants.ACCESS_EXTERNAL_DTD, "");
             factory.setProperty(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
             return factory.newSchema(new StreamSource(xsd));
@@ -242,7 +221,6 @@ public class XmlPaymentFileReader implements PaymentFileReader {
         }
     }
 
-    /** The file as read, including the header totals that PaymentBatch does not carry. */
     private static final class ParsedFile {
         private String messageId;
         private String debtorIban;

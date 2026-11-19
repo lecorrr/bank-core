@@ -13,7 +13,7 @@
 
     <groupId>dev.tkachuk</groupId>
     <artifactId>bank-core</artifactId>
-    <version>0.5.0</version>
+    <version>0.5.1</version>
     <name>bank-core</name>
     <description>Accounts, transfers and payment files for a small digital bank</description>
 
@@ -27,10 +27,9 @@
         <jacoco.version>0.8.13</jacoco.version>
         <!-- Spring Boot does not manage Spring Modulith; 2.1 is the line built for Spring Boot 4.1. -->
         <spring-modulith.version>2.1.2</spring-modulith.version>
-        <!-- Mockito as a Java agent, as JDK 21+ asks, instead of attaching itself with a warning. JaCoCo puts its
-             own agent in front of this. -->
+        <!-- Load Mockito as an agent at startup; newer JDKs warn about attaching it later. -->
         <argLine>-javaagent:${settings.localRepository}/org/mockito/mockito-core/${mockito.version}/mockito-core-${mockito.version}.jar</argLine>
-        <!-- Line coverage of unit and integration tests together; below this the build fails. -->
+        <!-- Line coverage of unit and integration tests together. -->
         <coverage.minimum>0.80</coverage.minimum>
     </properties>
 
@@ -75,8 +74,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-kafka</artifactId>
         </dependency>
-        <!-- The transactional outbox: Spring Modulith's event publication registry, kept in PostgreSQL through
-             JDBC, its events stored as JSON and sent on to Kafka. Only these modules, not the rest of Modulith. -->
+        <!-- Transactional outbox: Spring Modulith's event publication registry (JDBC) and its Kafka support. -->
         <dependency>
             <groupId>org.springframework.modulith</groupId>
             <artifactId>spring-modulith-events-api</artifactId>

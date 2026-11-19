@@ -3,7 +3,7 @@ package dev.tkachuk.bank.common.error;
 import java.util.List;
 import java.util.Objects;
 
-/** A business rule said no. The code says which rule; the message says why, for the API caller. */
+/** A business rule failed. The code is for programs, the message for the API caller. */
 public class BankException extends RuntimeException {
 
     private final ErrorCode code;
@@ -13,7 +13,6 @@ public class BankException extends RuntimeException {
         this(code, message, List.of());
     }
 
-    /** @param violations every problem found when a whole input was checked, each naming its field */
     public BankException(ErrorCode code, String message, List<String> violations) {
         super(message);
         this.code = Objects.requireNonNull(code, "code");
@@ -24,7 +23,6 @@ public class BankException extends RuntimeException {
         return code;
     }
 
-    /** Empty unless a whole input (a payment file, say) was checked and several problems were found. */
     public List<String> violations() {
         return violations;
     }

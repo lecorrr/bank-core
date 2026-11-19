@@ -21,14 +21,12 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** Reading the answers bank-integration sends, and passing each to TransferSettlement, which is mocked here. */
 @ExtendWith(MockitoExtension.class)
 class TransferStatusListenerTest {
 
     private static final UUID TRANSFER_ID = UUID.fromString("0f5bd7c2-3a4e-4c1b-9d0e-6f2a8b1c3d4e");
     private static final String REPORT_ID = "b076ecf1eb4146f4a1fec9042f425982";
 
-    /** As bank-integration writes it (its TransferStatusChanged). */
     private static final String SETTLED = """
             {"transferId": "0f5bd7c2-3a4e-4c1b-9d0e-6f2a8b1c3d4e", "status": "SETTLED",
              "reportId": "b076ecf1eb4146f4a1fec9042f425982", "reportedAt": "2026-11-17T20:17:09Z"}
@@ -45,13 +43,13 @@ class TransferStatusListenerTest {
     }
 
     @Test
-    void readsTheEventBankIntegrationWrites() {
+    void shouldReadEventAsBankIntegrationWritesIt() {
         assertThat(listener.read(record(SETTLED))).contains(new TransferStatusChanged(TRANSFER_ID, Status.SETTLED,
                 REPORT_ID, Instant.parse("2026-11-17T20:17:09Z")));
     }
 
     @Test
-    void fieldsAddedLaterAreIgnored() {
+    void shouldIgnoreUnknownFields() {
         String withAReason = SETTLED.replace("\"status\"", "\"reason\": \"AC04\", \"status\"");
 
         assertThat(listener.read(record(withAReason))).isPresent();
@@ -72,19 +70,19 @@ class TransferStatusListenerTest {
             "{\"transferId\": \"0f5bd7c2-3a4e-4c1b-9d0e-6f2a8b1c3d4e\", \"status\": \"SETTLED\", "
                     + "\"reportId\": \"123456789012345678901234567890123456\"}"
     })
-    void anEventThatCannotBeAppliedIsSkipped(String json) {
+    void shouldSkipEventThatCannotBeApplied(String json) {
         assertThat(listener.read(record(json))).isEmpty();
     }
 
     @Test
-    void aSkippedEventIsNotAnErrorSoTheListenerMovesOn() {
+    void shouldNotThrowForSkippedEvent() {
         listener.on(record("not json"));
 
         verifyNoInteractions(settlement);
     }
 
     @Test
-    void anAcceptedTransferIsSettled() {
+    void shouldSettleAcceptedTransfer() {
         when(settlement.settle(TRANSFER_ID, REPORT_ID)).thenReturn(Outcome.APPLIED);
 
         listener.on(record(SETTLED));
@@ -93,7 +91,7 @@ class TransferStatusListenerTest {
     }
 
     @Test
-    void aRefusedTransferIsRejected() {
+    void shouldRejectRefusedTransfer() {
         when(settlement.reject(TRANSFER_ID, REPORT_ID)).thenReturn(Outcome.APPLIED);
 
         listener.on(record(SETTLED.replace("SETTLED", "REJECTED")));
@@ -102,14 +100,14 @@ class TransferStatusListenerTest {
     }
 
     @Test
-    void stillPendingChangesNothing() {
+    void shouldIgnorePendingStatus() {
         listener.on(record(SETTLED.replace("SETTLED", "PENDING")));
 
         verifyNoInteractions(settlement);
     }
 
     @Test
-    void anAnswerThatCannotBeAppliedNowFailsSoItIsTriedAgain() {
+    void shouldThrowWhenAnswerCannotBeAppliedNow() {
         when(settlement.settle(TRANSFER_ID, REPORT_ID)).thenThrow(new IllegalStateException("database down"));
 
         assertThatThrownBy(() -> listener.on(record(SETTLED))).hasMessage("database down");

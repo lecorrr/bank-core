@@ -16,13 +16,9 @@ public interface AccountRepository extends JpaRepository<Account, Long> {
 
     List<Account> findAllByKindOrderByIdAsc(AccountKind kind);
 
-    /** One of the bank's own accounts: there is exactly one of each internal kind. */
     Optional<Account> findByKind(AccountKind kind);
 
-    /**
-     * Loads the account and locks its row (SELECT ... FOR UPDATE) until the transaction ends.
-     * Another transaction asking for the same row waits, so two transfers cannot both spend the same money.
-     */
+    // SELECT ... FOR UPDATE: a second transaction on the same account waits, so money can't be spent twice.
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select a from Account a where a.iban = :iban")
     Optional<Account> findByIbanForUpdate(@Param("iban") String iban);

@@ -27,12 +27,12 @@ class TransferTest {
     private final Transfer transfer = Transfer.completed(ORIGINAL, NOW);
 
     @Test
-    void theSameRequestHasTheSamePayload() {
+    void shouldMatchSamePayload() {
         assertThat(transfer.hasSamePayloadAs(ORIGINAL)).isTrue();
     }
 
     @Test
-    void amountsAreComparedByValueNotByScale() {
+    void shouldCompareAmountsByValue() {
         TransferCommand sameAmountOneDecimal = new TransferCommand("key-1", TestIbans.A, TestIbans.B,
                 new BigDecimal("150.0"), "UAH", "Rent");
 
@@ -41,7 +41,7 @@ class TransferTest {
 
     @ParameterizedTest(name = "different {0}")
     @MethodSource("changedRequests")
-    void anyOtherDifferenceIsAnotherRequest(String changed, TransferCommand command) {
+    void shouldNotMatchDifferentPayload(String changed, TransferCommand command) {
         assertThat(transfer.hasSamePayloadAs(command)).isFalse();
     }
 
@@ -62,7 +62,7 @@ class TransferTest {
     }
 
     @Test
-    void aTransferToAnotherBankWaitsForItsAnswer() {
+    void shouldBePendingWhenToAnotherBank() {
         Transfer pending = Transfer.pending(TO_PARTNER, NOW);
 
         assertThat(pending.getStatus()).isEqualTo(TransferStatus.PENDING);
@@ -73,7 +73,7 @@ class TransferTest {
     }
 
     @Test
-    void acceptedItIsCompletedWithTheReportThatSaidSo() {
+    void shouldCompleteWithReportId() {
         Transfer pending = Transfer.pending(TO_PARTNER, NOW);
 
         pending.settle("REPORT-1");
@@ -83,7 +83,7 @@ class TransferTest {
     }
 
     @Test
-    void refusedItIsRejectedWithTheReportThatSaidSo() {
+    void shouldRejectWithReportId() {
         Transfer pending = Transfer.pending(TO_PARTNER, NOW);
 
         pending.reject("REPORT-1");
@@ -93,7 +93,7 @@ class TransferTest {
     }
 
     @Test
-    void aTransferTakesOneAnswerOnly() {
+    void shouldAcceptOnlyOneAnswer() {
         Transfer settled = Transfer.pending(TO_PARTNER, NOW);
         settled.settle("REPORT-1");
 
@@ -104,7 +104,7 @@ class TransferTest {
     }
 
     @Test
-    void aPaymentFromAnotherBankIsKeptUnderItsUetrAndNeedsNoIdempotencyKey() {
+    void shouldKeepIncomingPaymentByUetr() {
         IncomingTransferCommand payment = new IncomingTransferCommand(UETR, TestIbans.PARTNER, "Olena Kovalenko",
                 TestIbans.A, "Artem Demo", new BigDecimal("250.00"), "UAH", "For the concert tickets", NOW);
 
@@ -124,7 +124,7 @@ class TransferTest {
     }
 
     @Test
-    void aTransferWithinTheBankTakesNoAnswer() {
+    void shouldRejectAnswerForInternalTransfer() {
         assertThatThrownBy(() -> transfer.settle("REPORT-1")).isInstanceOf(IllegalStateException.class);
         assertThat(transfer.getStatus()).isEqualTo(TransferStatus.COMPLETED);
     }

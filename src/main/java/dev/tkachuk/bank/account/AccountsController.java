@@ -12,7 +12,6 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
-/** HTTP only: the routes and validation come from the generated AccountsApi, the rules from AccountService. */
 @RestController
 @RequiredArgsConstructor
 public class AccountsController implements AccountsApi {

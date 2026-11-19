@@ -23,17 +23,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.WebRequest;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-/**
- * Turns exceptions into RFC 9457 problem details with a "code" field.
- * The ErrorCode to HTTP status mapping lives only here, so business code never deals with HTTP.
- */
+/** Maps exceptions to RFC 9457 problem details with a "code" field: the one place ErrorCode meets HTTP. */
 @Slf4j
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     static final String VALIDATION_FAILED = "VALIDATION_FAILED";
     static final String INTERNAL_ERROR = "INTERNAL_ERROR";
-    /** Words of an error code that a title writes in capitals. */
     private static final Set<String> ACRONYMS = Set.of("iban");
 
     @ExceptionHandler(BankException.class)
@@ -46,10 +42,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(status).body(problem);
     }
 
-    /**
-     * A path variable or header broke a constraint of the generated interfaces (@Size on {iban},
-     * on Idempotency-Key). Those interfaces are @Validated, so the check runs in a proxy and fails this way.
-     */
+    // Constraints on path variables and headers of the generated, @Validated API interfaces.
     @ExceptionHandler(ConstraintViolationException.class)
     ResponseEntity<ProblemDetail> handleConstraintViolation(ConstraintViolationException ex) {
         List<String> violations = ex.getConstraintViolations().stream()
@@ -62,7 +55,6 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(status).body(problem);
     }
 
-    /** A database constraint or lock stopped the request, usually two requests racing for the same rows. */
     @ExceptionHandler({DataIntegrityViolationException.class, PessimisticLockingFailureException.class})
     ResponseEntity<ProblemDetail> handleConflict(RuntimeException ex) {
         log.warn("Request stopped by a database constraint or lock: {}", ex.getMessage());
@@ -84,7 +76,6 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(status).headers(headers).body(problem);
     }
 
-    /** Anything else is a bug: log it with its stack trace and answer in the same problem format, without internals. */
     @ExceptionHandler(Exception.class)
     ResponseEntity<ProblemDetail> handleUnexpected(Exception ex) {
         log.error("Unexpected error", ex);
@@ -94,11 +85,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return ResponseEntity.status(status).body(problem);
     }
 
-    /**
-     * 409 says the request clashes with the current state, such as rows another request is changing. A reused
-     * Idempotency-Key is a mistake in the request itself and can never succeed, so it is a 422, as the IETF draft
-     * for the Idempotency-Key header recommends.
-     */
+    // A reused Idempotency-Key can never succeed, so it's 422, not 409 (IETF Idempotency-Key draft).
     static HttpStatusCode statusOf(ErrorCode code) {
         int status = switch (code) {
             case ACCOUNT_NOT_FOUND, TRANSFER_NOT_FOUND -> 404;
@@ -111,7 +98,6 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return HttpStatusCode.valueOf(status);
     }
 
-    /** "createTransfer.idempotencyKey" becomes "idempotencyKey": the caller knows no Java method names. */
     private static String leafName(Path path) {
         String name = path.toString();
         for (Path.Node node : path) {
@@ -131,7 +117,6 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return problem;
     }
 
-    /** "account-not-found" becomes "Account not found", and an acronym keeps its capitals: "Invalid IBAN". */
     private static String titleOf(String slug) {
         String title = Arrays.stream(slug.split("-"))
                 .map(word -> ACRONYMS.contains(word) ? word.toUpperCase(Locale.ROOT) : word)

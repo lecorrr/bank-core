@@ -5,13 +5,7 @@ import org.springframework.modulith.events.ResubmissionOptions;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
-/**
- * The outbox's retry. An event Kafka did not take (it was down, say) is marked FAILED and stays in the
- * event_publication table; so is one that a crash left half sent, once the staleness check in application.yml
- * finds it. This sends the FAILED ones again, so a transfer's event reaches bank-integration once Kafka is back,
- * without a restart. Only FAILED ones: an event still on its way is left alone, so this job never sends one twice
- * at the same moment.
- */
+/** Resends outbox events that failed to reach Kafka (FAILED in event_publication), without a restart. */
 @Component
 class FailedEventResubmission {
 

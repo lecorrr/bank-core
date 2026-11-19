@@ -20,14 +20,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.testcontainers.kafka.KafkaContainer;
 
-/**
- * Payments from customers of other banks, through a real PostgreSQL and a real Kafka. The test plays
- * bank-integration: it publishes the IncomingTransferReceived events, and reads the IncomingTransferDecided events
- * bank-core sends back. Every test pays under a UETR of its own, so no test sees another's decisions.
- */
 class IncomingTransferIT extends IntegrationTest {
 
-    /** Generous: the first test also waits for bank-core's consumer to join its group. */
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
 
     @Autowired
@@ -43,7 +37,7 @@ class IncomingTransferIT extends IntegrationTest {
     }
 
     @Test
-    void aPaymentIsCreditedFromTheSettlementAccountAndTheDecisionGoesBack() throws Exception {
+    void shouldCreditPaymentAndPublishDecision() throws Exception {
         String uetr = UUID.randomUUID().toString();
 
         receive(uetr, TestIbans.A, "250.00");
@@ -75,12 +69,11 @@ class IncomingTransferIT extends IntegrationTest {
                 .andExpect(jsonPath("$.entries[0].balanceAfter").value(350.0))
                 .andExpect(jsonPath("$.entries[0].description").value("For the concert tickets"))
                 .andExpect(jsonPath("$.entries[0].transferId").value(transferId));
-        // Once Kafka has the decision, the outbox is empty again.
         await().atMost(TIMEOUT).untilAsserted(() -> assertThat(countRows("event_publication")).isZero());
     }
 
     @Test
-    void aPaymentToAnAccountThisBankDoesNotKeepIsRefusedAndMovesNoMoney() throws Exception {
+    void shouldRejectPaymentToUnknownAccount() throws Exception {
         String uetr = UUID.randomUUID().toString();
 
         receive(uetr, TestIbans.UNKNOWN, "250.00");
@@ -95,7 +88,7 @@ class IncomingTransferIT extends IntegrationTest {
     }
 
     @Test
-    void aPaymentInAnotherCurrencyThanThePayeesAccountIsRefused() throws Exception {
+    void shouldRejectPaymentInOtherCurrency() throws Exception {
         String uetr = UUID.randomUUID().toString();
 
         receive(uetr, TestIbans.D_USD, "250.00");
@@ -106,7 +99,7 @@ class IncomingTransferIT extends IntegrationTest {
     }
 
     @Test
-    void aCopyOfAPaymentIsCreditedOnceAndGetsTheSameDecisionAgain() throws Exception {
+    void shouldCreditDuplicatePaymentOnce() throws Exception {
         String uetr = UUID.randomUUID().toString();
 
         receive(uetr, TestIbans.A, "250.00");
@@ -124,10 +117,9 @@ class IncomingTransferIT extends IntegrationTest {
     }
 
     @Test
-    void anEventThatCannotBeReadIsSkippedAndTheNextPaymentIsStillCredited() throws Exception {
+    void shouldSkipUnreadableEventAndContinue() throws Exception {
         String uetr = UUID.randomUUID().toString();
 
-        // Keyed like the payment after it, so the two share a partition, where the second must not wait behind it.
         bankIntegration.publish(IncomingTransferReceived.TOPIC, TestIbans.A, "not json");
         receive(uetr, TestIbans.A, "250.00");
 
@@ -135,7 +127,6 @@ class IncomingTransferIT extends IntegrationTest {
         assertThat(JsonPath.<String>read(json, "$.decision")).isEqualTo("CREDITED");
     }
 
-    /** Brings in a payment as bank-integration does: JSON text, keyed by the payee's IBAN. */
     private void receive(String uetr, String toIban, String amount) throws Exception {
         bankIntegration.publish(IncomingTransferReceived.TOPIC, toIban, """
                 {"uetr": "%s",

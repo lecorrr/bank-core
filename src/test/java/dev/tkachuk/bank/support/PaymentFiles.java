@@ -5,7 +5,6 @@ import java.io.InputStream;
 import java.io.UncheckedIOException;
 import org.springframework.core.io.ClassPathResource;
 
-/** Sample payment files from src/test/resources/payment-files. */
 public final class PaymentFiles {
 
     private PaymentFiles() {

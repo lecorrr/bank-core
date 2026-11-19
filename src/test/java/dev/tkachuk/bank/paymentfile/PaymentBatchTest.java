@@ -11,14 +11,14 @@ import org.junit.jupiter.api.Test;
 class PaymentBatchTest {
 
     @Test
-    void listsEachRepeatedEndToEndIdOnceInFileOrder() {
+    void shouldListRepeatedEndToEndIdsOnceInOrder() {
         PaymentBatch batch = batchOf("E2E-2", "E2E-1", "E2E-2", "E2E-3", "E2E-1", "E2E-2");
 
         assertThat(batch.repeatedEndToEndIds()).containsExactly("E2E-2", "E2E-1");
     }
 
     @Test
-    void hasNoneRepeatedWhenEveryIdIsUsedOnce() {
+    void shouldListNoneWhenIdsAreUnique() {
         assertThat(batchOf("E2E-1", "E2E-2", "E2E-3").repeatedEndToEndIds()).isEmpty();
     }
 

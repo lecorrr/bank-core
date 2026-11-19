@@ -15,10 +15,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.stereotype.Service;
 
-/**
- * Runs a payment file: validate the whole file first, then pay each instruction as its own transfer.
- * Deliberately not @Transactional: one payment failing (say, no money left) must not undo the ones before it.
- */
+/** Pays a payment file, each payment as its own transfer. Not @Transactional: one failure must not undo the rest. */
 @Slf4j
 @Service
 public class PaymentBatchService {
@@ -56,7 +53,7 @@ public class PaymentBatchService {
     }
 
     private PaymentItemOutcome pay(PaymentBatch batch, PaymentInstruction payment) {
-        // Message id plus end-to-end id is unique per payment, so uploading the same file again pays nothing twice.
+        // Uploading the same file again pays nothing twice.
         String idempotencyKey = batch.messageId() + ":" + payment.endToEndId();
         String description = payment.remittanceInfo() != null
                 ? payment.remittanceInfo()
@@ -70,8 +67,6 @@ public class PaymentBatchService {
             log.info("Payment {} of batch {} rejected: {}", payment.endToEndId(), batch.messageId(), e.getMessage());
             return PaymentItemOutcome.ofRejected(payment.endToEndId(), e.code(), e.getMessage());
         } catch (DataIntegrityViolationException | PessimisticLockingFailureException e) {
-            // Another request changed the same rows at the same moment (often the same file uploaded twice).
-            // Every payment is idempotent, so uploading the file again finishes the job safely.
             log.warn("Payment {} of batch {} hit a concurrent change: {}", payment.endToEndId(), batch.messageId(),
                     e.getMessage());
             return PaymentItemOutcome.ofRejected(payment.endToEndId(), ErrorCode.CONFLICT,

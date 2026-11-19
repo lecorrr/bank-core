@@ -7,8 +7,8 @@ import org.springframework.context.annotation.Configuration;
 @Configuration(proxyBeanMethods = false)
 class AccountConfiguration {
 
-    /** Runs after Flyway, which has created the accounts this reads: repositories wait for the migrations. */
     @Bean
+    // Runs after Flyway, which creates the internal accounts.
     InternalAccounts internalAccounts(AccountRepository accounts, BankProperties bank) {
         return InternalAccounts.load(accounts, bank);
     }

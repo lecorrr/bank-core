@@ -18,7 +18,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.RequestBuilder;
 
-/** Uploading payment files end to end. The valid files pay 150.00 to B and 200.50 to C from A. */
 class PaymentBatchIT extends IntegrationTest {
 
     @BeforeEach
@@ -29,7 +28,7 @@ class PaymentBatchIT extends IntegrationTest {
     }
 
     @Test
-    void aJsonFilePaysEveryInstruction() throws Exception {
+    void shouldPayEveryInstructionOfJsonFile() throws Exception {
         mockMvc.perform(upload("valid-batch.json", "application/json"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messageId").value("MSG-TEST-JSON-0001"))
@@ -44,7 +43,7 @@ class PaymentBatchIT extends IntegrationTest {
     }
 
     @Test
-    void anXmlFilePaysEveryInstruction() throws Exception {
+    void shouldPayEveryInstructionOfXmlFile() throws Exception {
         mockMvc.perform(upload("valid-batch.xml", "application/xml"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.messageId").value("MSG-TEST-XML-0001"))
@@ -55,7 +54,7 @@ class PaymentBatchIT extends IntegrationTest {
     }
 
     @Test
-    void uploadingTheSameFileAgainPaysNothingTwice() throws Exception {
+    void shouldNotPayTwiceWhenFileIsUploadedAgain() throws Exception {
         mockMvc.perform(upload("valid-batch.json", "application/json")).andExpect(status().isOk());
 
         mockMvc.perform(upload("valid-batch.json", "application/json"))
@@ -67,7 +66,7 @@ class PaymentBatchIT extends IntegrationTest {
     }
 
     @Test
-    void aPaymentWithoutMoneyIsRefusedAndTheOthersStillGo() throws Exception {
+    void shouldRejectUnfundedPaymentAndPayTheOthers() throws Exception {
         jdbc.update("UPDATE accounts SET balance = 160.00 WHERE iban = ?", TestIbans.A);
 
         mockMvc.perform(upload("valid-batch.json", "application/json"))
@@ -84,7 +83,7 @@ class PaymentBatchIT extends IntegrationTest {
     }
 
     @Test
-    void anInvalidFileIsRefusedAsAWholeAndPaysNothing() throws Exception {
+    void shouldRejectInvalidFileAsAWhole() throws Exception {
         mockMvc.perform(upload("invalid-schema.json", "application/json"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PAYMENT_FILE"))
@@ -93,9 +92,8 @@ class PaymentBatchIT extends IntegrationTest {
         assertThat(countRows("transfers")).isZero();
     }
 
-    /** One amount has a third decimal, so nothing is paid, not even the valid payment before it. */
     @Test
-    void aJsonAmountWithThreeDecimalsPaysNothing() throws Exception {
+    void shouldRejectJsonAmountWithThreeDecimals() throws Exception {
         mockMvc.perform(upload("three-decimals.json", "application/json"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PAYMENT_FILE"))
@@ -105,7 +103,7 @@ class PaymentBatchIT extends IntegrationTest {
     }
 
     @Test
-    void anXmlFileWithExternalEntitiesIsRefused() throws Exception {
+    void shouldRejectXmlWithExternalEntities() throws Exception {
         mockMvc.perform(upload("xxe-attack.xml", "application/xml"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_PAYMENT_FILE"));
@@ -114,7 +112,7 @@ class PaymentBatchIT extends IntegrationTest {
     }
 
     @Test
-    void otherFileTypesAreRefused() throws Exception {
+    void shouldRejectOtherFileTypes() throws Exception {
         MockMultipartFile csv = new MockMultipartFile("file", "payments.csv", "text/csv",
                 "E2E-1;150.00".getBytes(StandardCharsets.UTF_8));
 
@@ -126,7 +124,7 @@ class PaymentBatchIT extends IntegrationTest {
     }
 
     @Test
-    void theFileIsRequired() throws Exception {
+    void shouldRequireFile() throws Exception {
         mockMvc.perform(multipart("/api/v1/payment-batches"))
                 .andExpect(status().isBadRequest());
     }

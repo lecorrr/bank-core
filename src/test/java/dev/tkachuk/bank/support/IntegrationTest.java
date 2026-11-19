@@ -10,12 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.jdbc.JdbcTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
-/**
- * Base class for integration tests: the whole application against a real PostgreSQL and a real Kafka.
- * Every test starts with empty tables, so tests never depend on each other; the bank's own accounts, which the
- * V2 migration creates, stay with zero balances. Accounts are inserted with SQL, so a test sets up exactly the
- * accounts it needs without going through the API.
- */
+/** Spring context with PostgreSQL and Kafka in Testcontainers; every test starts from an empty database. */
 @SpringBootTest
 @AutoConfigureMockMvc
 @Import({PostgresTestcontainer.class, KafkaTestcontainer.class})
@@ -31,6 +26,7 @@ public abstract class IntegrationTest {
     void cleanDatabase() {
         jdbc.execute("TRUNCATE ledger_entries, transfers, event_publication RESTART IDENTITY");
         jdbc.execute("DELETE FROM accounts WHERE kind = 'CUSTOMER'");
+        // The internal accounts come from a migration, so they stay; only their balances are reset.
         jdbc.execute("UPDATE accounts SET balance = 0");
     }
 
@@ -54,7 +50,6 @@ public abstract class IntegrationTest {
         return JdbcTestUtils.countRowsInTable(jdbc, table);
     }
 
-    /** Accounts customers opened: the bank's own accounts are always there. */
     protected int countCustomerAccounts() {
         return JdbcTestUtils.countRowsInTableWhere(jdbc, "accounts", "kind = 'CUSTOMER'");
     }

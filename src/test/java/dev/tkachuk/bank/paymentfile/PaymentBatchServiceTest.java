@@ -31,7 +31,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/** How a batch is run, with the file readers faked and the transfers mocked. */
 @ExtendWith(MockitoExtension.class)
 class PaymentBatchServiceTest {
 
@@ -52,7 +51,7 @@ class PaymentBatchServiceTest {
     }
 
     @Test
-    void everyPaymentIsATransferWithItsOwnIdempotencyKey() {
+    void shouldMakeEachPaymentATransferWithItsOwnKey() {
         when(transferService.transfer(any())).thenAnswer(call -> completed(call.getArgument(0), false));
 
         PaymentBatchReport report = service.process("batch.json", "application/json", emptyFile());
@@ -76,7 +75,7 @@ class PaymentBatchServiceTest {
     }
 
     @Test
-    void theFormatPicksTheReader() {
+    void shouldPickReaderByFormat() {
         PaymentBatch xmlBatch = new PaymentBatch("MSG-XML", TestIbans.A, BATCH.payments());
         service = new PaymentBatchService(List.of(reader(PaymentFileFormat.JSON, BATCH),
                 reader(PaymentFileFormat.XML, xmlBatch)), transferService);
@@ -89,7 +88,7 @@ class PaymentBatchServiceTest {
     }
 
     @Test
-    void aRefusedPaymentDoesNotStopTheOthers() {
+    void shouldContinueAfterRejectedPayment() {
         when(transferService.transfer(any()))
                 .thenThrow(new BankException(ErrorCode.INSUFFICIENT_FUNDS, "Not enough money"))
                 .thenAnswer(call -> completed(call.getArgument(0), false));
@@ -109,7 +108,7 @@ class PaymentBatchServiceTest {
     }
 
     @Test
-    void aConcurrentChangeIsReportedAsAConflictForThatPaymentOnly() {
+    void shouldReportConcurrentChangeAsConflict() {
         when(transferService.transfer(any()))
                 .thenThrow(new DataIntegrityViolationException("duplicate key value violates unique constraint"))
                 .thenAnswer(call -> completed(call.getArgument(0), false));
@@ -121,7 +120,7 @@ class PaymentBatchServiceTest {
     }
 
     @Test
-    void replayedPaymentsAreMarked() {
+    void shouldMarkReplayedPayments() {
         when(transferService.transfer(any())).thenAnswer(call -> completed(call.getArgument(0), true));
 
         PaymentBatchReport report = service.process("batch.json", null, emptyFile());
@@ -131,7 +130,7 @@ class PaymentBatchServiceTest {
     }
 
     @Test
-    void anInvalidFilePaysNothing() {
+    void shouldPayNothingForInvalidFile() {
         PaymentFileReader broken = new PaymentFileReader() {
             @Override
             public PaymentFileFormat format() {
@@ -151,14 +150,14 @@ class PaymentBatchServiceTest {
     }
 
     @Test
-    void anUnsupportedFilePaysNothing() {
+    void shouldPayNothingForUnsupportedFile() {
         assertThat(codeOf(() -> service.process("batch.csv", "text/csv", emptyFile())))
                 .isEqualTo(ErrorCode.UNSUPPORTED_FILE_FORMAT);
         verifyNoInteractions(transferService);
     }
 
     @Test
-    void startupFailsWithoutAReaderForEveryFormat() {
+    void shouldFailWithoutReaderForEveryFormat() {
         assertThatThrownBy(() -> new PaymentBatchService(List.of(reader(PaymentFileFormat.JSON, BATCH)),
                 transferService))
                 .isInstanceOf(IllegalStateException.class)
@@ -166,7 +165,7 @@ class PaymentBatchServiceTest {
     }
 
     @Test
-    void startupFailsWithTwoReadersForOneFormat() {
+    void shouldFailWithTwoReadersForOneFormat() {
         assertThatThrownBy(() -> new PaymentBatchService(List.of(reader(PaymentFileFormat.JSON, BATCH),
                 reader(PaymentFileFormat.JSON, BATCH), reader(PaymentFileFormat.XML, BATCH)), transferService))
                 .isInstanceOf(IllegalStateException.class)

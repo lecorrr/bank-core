@@ -14,7 +14,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/** The startup check on the bank's own accounts: a wrong setup stops the application with a reason. */
 @ExtendWith(MockitoExtension.class)
 class InternalAccountsTest {
 
@@ -24,7 +23,7 @@ class InternalAccountsTest {
     private AccountRepository accounts;
 
     @Test
-    void readsBothAccounts() {
+    void shouldLoadBothInternalAccounts() {
         when(accounts.findByKind(AccountKind.TRANSIT)).thenReturn(Optional.of(
                 TestAccounts.internal(5, TestIbans.TRANSIT, AccountKind.TRANSIT, "0.00")));
         when(accounts.findByKind(AccountKind.SETTLEMENT)).thenReturn(Optional.of(
@@ -35,7 +34,7 @@ class InternalAccountsTest {
     }
 
     @Test
-    void refusesToStartWithoutThem() {
+    void shouldFailWithoutInternalAccounts() {
         when(accounts.findByKind(AccountKind.TRANSIT)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> InternalAccounts.load(accounts, BANK))
@@ -44,7 +43,7 @@ class InternalAccountsTest {
     }
 
     @Test
-    void refusesAnAccountOfAnotherBank() {
+    void shouldRejectInternalAccountOfAnotherBank() {
         when(accounts.findByKind(AccountKind.TRANSIT)).thenReturn(Optional.of(
                 TestAccounts.internal(5, TestIbans.PARTNER, AccountKind.TRANSIT, "0.00")));
 
@@ -54,7 +53,7 @@ class InternalAccountsTest {
     }
 
     @Test
-    void refusesAnAccountInAnotherCurrency() {
+    void shouldRejectInternalAccountNotInUah() {
         Account inDollars = TestAccounts.internal(5, TestIbans.TRANSIT, AccountKind.TRANSIT, "0.00");
         ReflectionTestUtils.setField(inDollars, "currency", "USD");
         when(accounts.findByKind(AccountKind.TRANSIT)).thenReturn(Optional.of(inDollars));

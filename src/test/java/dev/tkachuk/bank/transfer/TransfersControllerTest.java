@@ -31,7 +31,6 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** The HTTP layer of transfers with the service mocked. */
 @WebMvcTest(TransfersController.class)
 @Import(TransferMapperImpl.class)
 class TransfersControllerTest {
@@ -48,7 +47,7 @@ class TransfersControllerTest {
     private TransferService transferService;
 
     @Test
-    void newTransferIsCreatedWithItsLocation() throws Exception {
+    void shouldReturn201WithLocation() throws Exception {
         when(transferService.transfer(any())).thenReturn(new TransferResult(transfer("key-1"), false));
 
         mockMvc.perform(post("/api/v1/transfers")
@@ -65,7 +64,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void theRequestReachesTheServiceUnchanged() throws Exception {
+    void shouldPassRequestToServiceUnchanged() throws Exception {
         when(transferService.transfer(any())).thenReturn(new TransferResult(transfer("key-1"), false));
 
         mockMvc.perform(post("/api/v1/transfers")
@@ -84,7 +83,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void replayAnswersOkAndSaysSo() throws Exception {
+    void shouldReturn200ForReplay() throws Exception {
         when(transferService.transfer(any())).thenReturn(new TransferResult(transfer("key-1"), true));
 
         mockMvc.perform(post("/api/v1/transfers")
@@ -98,7 +97,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void idempotencyKeyIsRequired() throws Exception {
+    void shouldRequireIdempotencyKey() throws Exception {
         mockMvc.perform(post("/api/v1/transfers")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(VALID_BODY))
@@ -108,7 +107,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void invalidBodyListsEveryProblem() throws Exception {
+    void shouldListEveryProblemOfInvalidBody() throws Exception {
         mockMvc.perform(post("/api/v1/transfers")
                         .header("Idempotency-Key", "key-1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -122,7 +121,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void unknownCurrencyIsABadRequest() throws Exception {
+    void shouldReturn400ForUnknownCurrency() throws Exception {
         mockMvc.perform(post("/api/v1/transfers")
                         .header("Idempotency-Key", "key-1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -133,7 +132,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void businessErrorsBecomeProblemDetails() throws Exception {
+    void shouldReturnProblemDetailsForBusinessErrors() throws Exception {
         when(transferService.transfer(any()))
                 .thenThrow(new BankException(ErrorCode.INSUFFICIENT_FUNDS, "Balance 10.00 is less than 150.00"));
 
@@ -151,7 +150,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void aTransferToAnotherBankCarriesThePayeesName() throws Exception {
+    void shouldPassPayeeNameForOtherBank() throws Exception {
         Transfer pending = Transfer.pending(new TransferCommand("key-2", TestIbans.A, TestIbans.PARTNER,
                 "Olena Kovalenko", new BigDecimal("150.00"), "UAH", "Rent"), Instant.parse("2026-11-09T10:00:00Z"));
         ReflectionTestUtils.setField(pending, "id", TRANSFER_ID);
@@ -173,7 +172,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void aMissingPayeeNameForAnotherBankIsABadRequest() throws Exception {
+    void shouldReturn400ForMissingPayeeName() throws Exception {
         when(transferService.transfer(any())).thenThrow(new BankException(ErrorCode.BENEFICIARY_NAME_REQUIRED,
                 "A transfer to another bank needs the payee's name (toName)"));
 
@@ -187,7 +186,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void aTransferAbroadIsUnprocessable() throws Exception {
+    void shouldReturn422ForTransferAbroad() throws Exception {
         when(transferService.transfer(any())).thenThrow(new BankException(ErrorCode.UNSUPPORTED_DESTINATION,
                 "Transfers to banks outside Ukraine are not supported"));
 
@@ -200,7 +199,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void aDescriptionOfSpacesOnlyIsABadRequest() throws Exception {
+    void shouldReturn400ForBlankDescription() throws Exception {
         mockMvc.perform(post("/api/v1/transfers")
                         .header("Idempotency-Key", "key-1")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -212,7 +211,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void returnsATransferById() throws Exception {
+    void shouldReturnTransferById() throws Exception {
         when(transferService.get(TRANSFER_ID)).thenReturn(transfer("key-1"));
 
         mockMvc.perform(get("/api/v1/transfers/{id}", TRANSFER_ID))
@@ -224,7 +223,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void unknownTransferIsNotFound() throws Exception {
+    void shouldReturn404ForUnknownTransfer() throws Exception {
         when(transferService.get(any()))
                 .thenThrow(new BankException(ErrorCode.TRANSFER_NOT_FOUND, "Transfer not found"));
 
@@ -234,7 +233,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void transferIdMustBeAUuid() throws Exception {
+    void shouldRejectNonUuidTransferId() throws Exception {
         mockMvc.perform(get("/api/v1/transfers/{id}", "not-a-uuid"))
                 .andExpect(status().isBadRequest());
 
@@ -242,7 +241,7 @@ class TransfersControllerTest {
     }
 
     @Test
-    void unexpectedErrorsDoNotLeakInternals() throws Exception {
+    void shouldNotLeakInternalsOnUnexpectedError() throws Exception {
         when(transferService.get(any())).thenThrow(new IllegalStateException("connection pool secret-host:5432"));
 
         mockMvc.perform(get("/api/v1/transfers/{id}", TRANSFER_ID))
@@ -255,7 +254,6 @@ class TransfersControllerTest {
         TransferCommand command = new TransferCommand(idempotencyKey, TestIbans.A, TestIbans.B,
                 new BigDecimal("150.00"), "UAH", "Rent");
         Transfer transfer = Transfer.completed(command, Instant.parse("2026-11-09T10:00:00Z"));
-        // The database assigns the id on save; here there is no database.
         ReflectionTestUtils.setField(transfer, "id", TRANSFER_ID);
         return transfer;
     }

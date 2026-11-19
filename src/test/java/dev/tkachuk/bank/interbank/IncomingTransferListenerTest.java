@@ -26,14 +26,12 @@ import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
-/** Reading the payments bank-integration brings in, and passing each to IncomingTransfers, which is mocked here. */
 @ExtendWith(MockitoExtension.class)
 class IncomingTransferListenerTest {
 
     private static final UUID UETR = UUID.fromString("3b9f7a52-1c4d-4e8f-a0b6-7d2e5c9f1a34");
     private static final Instant RECEIVED_AT = Instant.parse("2026-11-18T09:15:00Z");
 
-    /** As bank-integration writes it (its IncomingTransferReceived). */
     private static final String PAYMENT = """
             {"uetr": "3b9f7a52-1c4d-4e8f-a0b6-7d2e5c9f1a34",
              "fromIban": "UA643888880000000000000000777", "fromName": "Olena Kovalenko",
@@ -57,14 +55,14 @@ class IncomingTransferListenerTest {
     }
 
     @Test
-    void readsTheEventBankIntegrationWrites() {
+    void shouldReadEventAsBankIntegrationWritesIt() {
         assertThat(listener.read(record(PAYMENT))).contains(new IncomingTransferReceived(UETR, TestIbans.PARTNER,
                 "Olena Kovalenko", TestIbans.A, "Artem Demo", new BigDecimal("250.00"), "UAH",
                 "For the concert tickets", RECEIVED_AT));
     }
 
     @Test
-    void fieldsAddedLaterAreIgnored() {
+    void shouldIgnoreUnknownFields() {
         String withAnEndToEndId = PAYMENT.replace("\"amount\"", "\"endToEndId\": \"NOTPROVIDED\", \"amount\"");
 
         assertThat(listener.read(record(withAnEndToEndId))).isPresent();
@@ -73,11 +71,10 @@ class IncomingTransferListenerTest {
     @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {"   ", "not json", "[]", "{}", "{\"fromIban\": \"UA643888880000000000000000777\"}"})
-    void anEventThatIsNoPaymentIsSkipped(String json) {
+    void shouldSkipEventThatIsNotAPayment(String json) {
         assertThat(listener.read(record(json))).isEmpty();
     }
 
-    /** Each case is "what the payment says|what it says instead". */
     @ParameterizedTest
     @ValueSource(strings = {
             "3b9f7a52-1c4d-4e8f-a0b6-7d2e5c9f1a34|not-a-uuid",
@@ -90,7 +87,7 @@ class IncomingTransferListenerTest {
             "For the concert tickets|" + "For the concert tickets, and for the taxi to the concert hall, and for the "
                     + "programme, and for the coat check, and for the drinks in the interval, and so on"
     })
-    void aPaymentThatBreaksARuleIsSkipped(String change) {
+    void shouldSkipPaymentThatBreaksARule(String change) {
         String[] parts = change.split("\\|");
         assertThat(PAYMENT).as("the case must change the payment").contains(parts[0]);
 
@@ -98,14 +95,14 @@ class IncomingTransferListenerTest {
     }
 
     @Test
-    void aSkippedEventIsNotAnErrorSoTheListenerMovesOn() {
+    void shouldNotThrowForSkippedEvent() {
         listener.on(record("not json"));
 
         verifyNoInteractions(incomingTransfers);
     }
 
     @Test
-    void aPaymentGoesToIncomingTransfersAsItCame() {
+    void shouldPassPaymentToIncomingTransfers() {
         when(incomingTransfers.receive(COMMAND)).thenReturn(new Received(Outcome.CREDITED,
                 new IncomingTransferDecision(UETR, UUID.randomUUID(), null, RECEIVED_AT)));
 
@@ -115,7 +112,7 @@ class IncomingTransferListenerTest {
     }
 
     @Test
-    void aPaymentThatCannotBeDecidedOnNowFailsSoItIsTriedAgain() {
+    void shouldThrowWhenPaymentCannotBeDecidedNow() {
         when(incomingTransfers.receive(any(IncomingTransferCommand.class)))
                 .thenThrow(new IllegalStateException("database down"));
 

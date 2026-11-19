@@ -16,7 +16,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
 import org.springframework.test.web.servlet.RequestBuilder;
 
-/** Transfers end to end: HTTP, the transaction and the database constraints together. */
 class TransferFlowIT extends IntegrationTest {
 
     @BeforeEach
@@ -27,7 +26,7 @@ class TransferFlowIT extends IntegrationTest {
     }
 
     @Test
-    void movesMoneyAndRecordsBothSides() throws Exception {
+    void shouldMoveMoneyAndRecordBothSides() throws Exception {
         String body = mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "150.00"))
                 .andExpect(status().isCreated())
                 .andExpect(header().exists("Location"))
@@ -57,7 +56,7 @@ class TransferFlowIT extends IntegrationTest {
     }
 
     @Test
-    void sendingTheSameRequestAgainMovesNoMoreMoney() throws Exception {
+    void shouldNotMoveMoneyAgainForRepeatedRequest() throws Exception {
         String first = mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "150.00"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
@@ -73,7 +72,7 @@ class TransferFlowIT extends IntegrationTest {
     }
 
     @Test
-    void reusingAKeyForAnotherRequestIsRefused() throws Exception {
+    void shouldRejectReusedIdempotencyKey() throws Exception {
         mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "150.00")).andExpect(status().isCreated());
 
         mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "999.00"))
@@ -85,7 +84,7 @@ class TransferFlowIT extends IntegrationTest {
     }
 
     @Test
-    void refusedTransfersChangeNothing() throws Exception {
+    void shouldChangeNothingWhenRejected() throws Exception {
         mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "1000.01"))
                 .andExpect(status().is(422))
                 .andExpect(jsonPath("$.code").value("INSUFFICIENT_FUNDS"));
@@ -105,9 +104,8 @@ class TransferFlowIT extends IntegrationTest {
         assertThat(countRows("ledger_entries")).isZero();
     }
 
-    /** PostgreSQL keeps microseconds, so an answer with nanoseconds would not match the row read back later. */
     @Test
-    void theCreationTimeReadsBackAsItWasAnswered() throws Exception {
+    void shouldReturnSameCreationTimeOnRead() throws Exception {
         String created = mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "150.00"))
                 .andExpect(status().isCreated())
                 .andReturn().getResponse().getContentAsString();
@@ -123,7 +121,7 @@ class TransferFlowIT extends IntegrationTest {
     }
 
     @Test
-    void theAccountCanBeEmptiedExactly() throws Exception {
+    void shouldAllowEmptyingAccountExactly() throws Exception {
         mockMvc.perform(transfer("key-1", TestIbans.A, TestIbans.B, "1000.00")).andExpect(status().isCreated());
 
         assertThat(balanceOf(TestIbans.A)).isEqualByComparingTo("0.00");

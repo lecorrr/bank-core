@@ -15,10 +15,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * One line of an account statement. Entries are only ever inserted, never changed, so the sum of an
- * account's entries always explains its balance. A transfer writes two: a DEBIT and a CREDIT.
- */
+/** One line of an account statement. Entries are only inserted, never changed. */
 @Entity
 @Table(name = "ledger_entries")
 @Getter
@@ -55,24 +52,12 @@ public class LedgerEntry {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    /**
-     * Money that came into the account.
-     *
-     * @param balanceAfter the account balance after the credit was applied
-     * @param transferId   the transfer this entry belongs to, or null for a deposit
-     */
     public static LedgerEntry credit(Long accountId, BigDecimal amount, BigDecimal balanceAfter, EntryType type,
             UUID transferId, String description, Instant createdAt) {
         return new LedgerEntry(accountId, EntryDirection.CREDIT, amount, balanceAfter, type, transferId,
                 description, createdAt);
     }
 
-    /**
-     * Money that left the account.
-     *
-     * @param balanceAfter the account balance after the debit was applied
-     * @param transferId   the transfer this entry belongs to
-     */
     public static LedgerEntry debit(Long accountId, BigDecimal amount, BigDecimal balanceAfter, EntryType type,
             UUID transferId, String description, Instant createdAt) {
         return new LedgerEntry(accountId, EntryDirection.DEBIT, amount, balanceAfter, type, transferId,

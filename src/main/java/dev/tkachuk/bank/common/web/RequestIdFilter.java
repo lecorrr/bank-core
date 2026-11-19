@@ -11,16 +11,13 @@ import org.slf4j.MDC;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-/**
- * Gives every request an id, returns it in X-Request-Id and puts it in the logging MDC,
- * so all log lines of one request can be found together (later in ELK).
- */
+/** Gives every request an id, in the X-Request-Id header and in the logging MDC. */
 @Component
 public class RequestIdFilter extends OncePerRequestFilter {
 
     public static final String HEADER = "X-Request-Id";
     static final String MDC_KEY = "requestId";
-    /** A caller's id is reused only if it is short and plain, so it cannot inject anything into the logs. */
+    // A caller's id is kept only if short and plain, so it can't inject anything into the logs.
     private static final Pattern SAFE_ID = Pattern.compile("[A-Za-z0-9-]{1,64}");
 
     @Override

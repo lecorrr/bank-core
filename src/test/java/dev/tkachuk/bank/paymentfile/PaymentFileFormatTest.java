@@ -18,7 +18,7 @@ class PaymentFileFormatTest {
             ",                  text/xml,                 XML",
             "upload,            application/vnd.bank+json, JSON"
     })
-    void extensionDecidesFirstThenContentType(String filename, String contentType, PaymentFileFormat expected) {
+    void shouldDetectByExtensionThenContentType(String filename, String contentType, PaymentFileFormat expected) {
         assertThat(PaymentFileFormat.detect(filename, contentType)).isEqualTo(expected);
     }
 
@@ -29,7 +29,7 @@ class PaymentFileFormatTest {
             "'',                application/octet-stream",
             "payments.json.exe, application/x-msdownload"
     })
-    void anythingElseIsRefused(String filename, String contentType) {
+    void shouldRejectUnknownFormat(String filename, String contentType) {
         assertThat(codeOf(() -> PaymentFileFormat.detect(filename, contentType)))
                 .isEqualTo(ErrorCode.UNSUPPORTED_FILE_FORMAT);
     }

@@ -16,17 +16,12 @@ import java.util.stream.Stream;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
 
-/**
- * The module rules from ARCHITECTURE.md, checked on the source code so they cannot quietly erode.
- * A failure names the file and the import that broke a rule.
- */
 class LayeringTest {
 
     private static final Path MAIN_SOURCES = Path.of("src", "main", "java", "dev", "tkachuk", "bank");
     private static final String BASE_PACKAGE = "dev.tkachuk.bank.";
     private static final Pattern IMPORT = Pattern.compile("^import\\s+(?:static\\s+)?([\\w.]+)", Pattern.MULTILINE);
 
-    /** Which of the application's own packages each package may import, besides itself (see ARCHITECTURE.md). */
     private static final Map<String, Set<String>> MAY_DEPEND_ON = Map.of(
             "common", Set.of(),
             "ledger", Set.of("common"),
@@ -54,7 +49,7 @@ class LayeringTest {
     }
 
     @Test
-    void everyPackageHasADependencyRule() {
+    void shouldHaveDependencyRuleForEveryPackage() {
         List<String> withoutRule = sources.stream()
                 .map(SourceFile::module)
                 .filter(module -> !module.isEmpty() && !MAY_DEPEND_ON.containsKey(module))
@@ -65,13 +60,12 @@ class LayeringTest {
     }
 
     @Test
-    void packagesDependOnlyInTheAllowedDirection() {
+    void shouldDependOnlyInAllowedDirection() {
         List<String> violations = new ArrayList<>();
         for (SourceFile source : sources) {
             Set<String> allowed = MAY_DEPEND_ON.getOrDefault(source.module(), Set.of());
             for (String imported : source.imports()) {
                 String target = moduleOf(imported);
-                // Not our code, our own module, or the generated API (the next test covers that).
                 if (target == null || target.equals(source.module()) || target.equals("api")) {
                     continue;
                 }
@@ -85,7 +79,7 @@ class LayeringTest {
     }
 
     @Test
-    void onlyControllersAndMappersSeeTheGeneratedApi() {
+    void shouldKeepGeneratedApiInControllersAndMappers() {
         List<String> violations = new ArrayList<>();
         for (SourceFile source : sources) {
             boolean allowed = source.name().endsWith("Controller") || source.name().endsWith("Mapper");
@@ -100,7 +94,7 @@ class LayeringTest {
     }
 
     @Test
-    void onlyTheWebEdgeKnowsAboutHttp() {
+    void shouldKeepHttpInWebLayer() {
         List<String> violations = new ArrayList<>();
         for (SourceFile source : sources) {
             boolean allowed = source.name().endsWith("Controller") || source.relativePath().startsWith("common/web/");
@@ -116,7 +110,7 @@ class LayeringTest {
     }
 
     @Test
-    void onlyTheInterbankEdgeKnowsAboutMessaging() {
+    void shouldKeepMessagingInInterbankPackage() {
         List<String> violations = new ArrayList<>();
         for (SourceFile source : sources) {
             for (String imported : source.imports()) {
@@ -130,7 +124,6 @@ class LayeringTest {
         assertThat(violations).as("Kafka and Spring Modulith types outside the interbank package").isEmpty();
     }
 
-    /** "dev.tkachuk.bank.ledger.LedgerEntry" is in module "ledger"; imports from elsewhere have none. */
     private static String moduleOf(String imported) {
         if (!imported.startsWith(BASE_PACKAGE)) {
             return null;
@@ -140,10 +133,6 @@ class LayeringTest {
         return dot < 0 ? "" : rest.substring(0, dot);
     }
 
-    /**
-     * @param relativePath for example "account/AccountService.java", always with forward slashes
-     * @param module       the first package below dev.tkachuk.bank, empty for BankCoreApplication
-     */
     private record SourceFile(String relativePath, String module, String name, List<String> imports) {
 
         static SourceFile read(Path path) {

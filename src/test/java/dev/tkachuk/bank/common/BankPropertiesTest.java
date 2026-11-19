@@ -11,14 +11,14 @@ import org.junit.jupiter.params.provider.ValueSource;
 class BankPropertiesTest {
 
     @Test
-    void aBankCodeIsSixDigits() {
+    void shouldAcceptSixDigitBankCode() {
         assertThat(new BankProperties("399999").code()).isEqualTo("399999");
     }
 
     @ParameterizedTest
     @NullAndEmptySource
     @ValueSource(strings = {"39999", "3999999", "39999A", " 399999"})
-    void anythingElseStopsTheApplication(String code) {
+    void shouldRejectInvalidBankCode(String code) {
         assertThatThrownBy(() -> new BankProperties(code))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("bank.code");

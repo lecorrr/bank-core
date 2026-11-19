@@ -7,7 +7,7 @@ import java.time.Instant;
 import org.springframework.beans.BeanUtils;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/** Builds Account objects for unit tests, without the database and without going through Iban.parse. */
+/** Accounts for unit tests, built without JPA. */
 public final class TestAccounts {
 
     private TestAccounts() {
@@ -25,7 +25,6 @@ public final class TestAccounts {
         return account;
     }
 
-    /** One of the bank's own accounts, in hryvnia like the ones the V2 migration creates. */
     public static Account internal(long id, String iban, AccountKind kind, String balance) {
         Account account = account(id, iban, "UAH", balance);
         ReflectionTestUtils.setField(account, "holderName", kind + " account");

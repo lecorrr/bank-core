@@ -14,7 +14,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.modulith.events.EventExternalizationConfiguration;
 import org.springframework.modulith.events.RoutingTarget;
 
-/** Which events leave bank-core, in which wire form, to which topic and under which key. */
 class InterbankConfigurationTest {
 
     private static final Instant NOW = Instant.parse("2026-11-18T09:15:02Z");
@@ -25,7 +24,7 @@ class InterbankConfigurationTest {
             new InterbankConfiguration().eventExternalizationConfiguration();
 
     @Test
-    void aTransferToAnotherBankGoesOutAsTransferRequestedKeyedByThePayer() {
+    void shouldPublishTransferRequestedKeyedByPayer() {
         InterbankTransferPending pending = new InterbankTransferPending(TRANSFER_ID, TestIbans.A, "Artem Demo",
                 TestIbans.PARTNER, "Olena Kovalenko", new BigDecimal("150.00"), "UAH", "Rent", NOW);
 
@@ -37,7 +36,7 @@ class InterbankConfigurationTest {
     }
 
     @Test
-    void aDecisionGoesOutAsIncomingTransferDecidedKeyedByTheUetr() {
+    void shouldPublishDecisionKeyedByUetr() {
         IncomingTransferDecision decision = new IncomingTransferDecision(UETR, TRANSFER_ID,
                 IncomingTransferRejection.CURRENCY_MISMATCH, NOW);
 
@@ -50,7 +49,7 @@ class InterbankConfigurationTest {
     }
 
     @Test
-    void aPaymentCreditedIsDecidedWithoutAReason() {
+    void shouldPublishCreditedDecisionWithoutReason() {
         IncomingTransferDecision credited = new IncomingTransferDecision(UETR, TRANSFER_ID, null, NOW);
 
         assertThat(externalization.map(credited)).isEqualTo(new IncomingTransferDecided(UETR, TRANSFER_ID,
@@ -58,7 +57,7 @@ class InterbankConfigurationTest {
     }
 
     @Test
-    void nothingElseLeavesBankCore() {
+    void shouldPublishNothingElse() {
         assertThat(externalization.supports("an event of some other kind")).isFalse();
     }
 }

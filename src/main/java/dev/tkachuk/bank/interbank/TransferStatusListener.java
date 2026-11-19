@@ -9,15 +9,10 @@ import org.slf4j.LoggerFactory;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
-/**
- * Applies the other banks' answers to bank-core's transfers. An event that cannot be read is logged and skipped:
- * no retry would make it readable. An answer that cannot be applied right now (the database is down, say) throws,
- * and the listener's error handler tries it again until it works (see InterbankConfiguration), so no answer is lost.
- */
+/** Applies the other banks' answers. Invalid events are skipped; other failures are retried. */
 @Component
 class TransferStatusListener {
 
-    /** bank-core's consumer group: it reads every interbank event, whoever else does. */
     static final String GROUP = "bank-core";
 
     private static final Logger log = LoggerFactory.getLogger(TransferStatusListener.class);
@@ -34,17 +29,16 @@ class TransferStatusListener {
         read(record).ifPresent(this::apply);
     }
 
-    /** The event, or empty (logged) when it is not one bank-core can apply. */
     Optional<TransferStatusChanged> read(ConsumerRecord<String, String> record) {
         return InterbankJson.read(record, TransferStatusChanged.class,
-                (where, problem) -> log.warn("Skipped a status event at {} that is not valid: {}", where, problem));
+                (where, problem) -> log.warn("Skipping invalid status event at {}: {}", where, problem));
     }
 
     void apply(TransferStatusChanged event) {
         switch (event.status()) {
             case SETTLED -> report(event, settlement.settle(event.transferId(), event.reportId()));
             case REJECTED -> report(event, settlement.reject(event.transferId(), event.reportId()));
-            case PENDING -> log.info("Transfer {} is still pending at the other bank (pacs.002 {})",
+            case PENDING -> log.info("Transfer {} still pending at the other bank (pacs.002 {})",
                     event.transferId(), event.reportId());
         }
     }
@@ -53,11 +47,11 @@ class TransferStatusListener {
         switch (outcome) {
             case APPLIED -> log.info("Transfer {} is {} (pacs.002 {})", event.transferId(), event.status(),
                     event.reportId());
-            case ALREADY_APPLIED -> log.info("Transfer {} was already {}: repeated answer ignored (pacs.002 {})",
+            case ALREADY_APPLIED -> log.info("Transfer {} already {}, ignoring repeated answer (pacs.002 {})",
                     event.transferId(), event.status(), event.reportId());
-            case CONFLICT -> log.error("Transfer {} already has the opposite answer, so {} from pacs.002 {} was not "
-                    + "applied: check it by hand", event.transferId(), event.status(), event.reportId());
-            case UNKNOWN_TRANSFER -> log.warn("There is no transfer {}: {} from pacs.002 {} ignored",
+            case CONFLICT -> log.error("Transfer {} already has the opposite answer, ignoring {} from pacs.002 {}",
+                    event.transferId(), event.status(), event.reportId());
+            case UNKNOWN_TRANSFER -> log.warn("Unknown transfer {}, ignoring {} from pacs.002 {}",
                     event.transferId(), event.status(), event.reportId());
         }
     }

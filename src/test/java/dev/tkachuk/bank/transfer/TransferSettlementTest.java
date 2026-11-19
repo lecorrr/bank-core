@@ -37,10 +37,6 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/**
- * What the other bank's answer does to a PENDING transfer, with the repositories mocked. The customer has already
- * paid 150.00 into the transit account, as TransferService does. InterbankTransferIT runs the same through Kafka.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class TransferSettlementTest {
@@ -75,7 +71,6 @@ class TransferSettlementTest {
         pending = Transfer.pending(new TransferCommand("key-1", TestIbans.A, TestIbans.PARTNER, "Olena Kovalenko",
                 new BigDecimal("150.00"), "UAH", "Rent"), NOW.minusSeconds(60));
         ReflectionTestUtils.setField(pending, "id", UUID.randomUUID());
-        // Any other id finds nothing: Mockito answers an unstubbed Optional with Optional.empty().
         when(transfers.findByIdForUpdate(pending.getId())).thenReturn(Optional.of(pending));
 
         when(ledgerEntries.saveAll(ArgumentMatchers.<LedgerEntry>anyIterable())).thenAnswer(call -> {
@@ -87,7 +82,7 @@ class TransferSettlementTest {
     }
 
     @Test
-    void anAcceptedTransferMovesOnToTheSettlementAccount() {
+    void shouldMoveAcceptedTransferToSettlementAccount() {
         assertThat(settlement.settle(pending.getId(), "REPORT-1")).isEqualTo(Outcome.APPLIED);
 
         assertThat(pending.getStatus()).isEqualTo(TransferStatus.COMPLETED);
@@ -113,7 +108,7 @@ class TransferSettlementTest {
     }
 
     @Test
-    void aRefusedTransferGivesTheMoneyBack() {
+    void shouldReturnMoneyForRejectedTransfer() {
         assertThat(settlement.reject(pending.getId(), "REPORT-1")).isEqualTo(Outcome.APPLIED);
 
         assertThat(pending.getStatus()).isEqualTo(TransferStatus.REJECTED);
@@ -136,7 +131,7 @@ class TransferSettlementTest {
     }
 
     @Test
-    void theSameAcceptanceTwiceChangesNothingTheSecondTime() {
+    void shouldIgnoreRepeatedAcceptance() {
         settlement.settle(pending.getId(), "REPORT-1");
         savedEntries.clear();
 
@@ -148,7 +143,7 @@ class TransferSettlementTest {
     }
 
     @Test
-    void theSameRefusalTwiceChangesNothingTheSecondTime() {
+    void shouldIgnoreRepeatedRejection() {
         settlement.reject(pending.getId(), "REPORT-1");
         savedEntries.clear();
 
@@ -159,7 +154,7 @@ class TransferSettlementTest {
     }
 
     @Test
-    void theOppositeAnswerAfterwardsIsAConflictAndChangesNothing() {
+    void shouldReportConflictForOppositeAnswer() {
         settlement.settle(pending.getId(), "REPORT-1");
         savedEntries.clear();
 
@@ -173,7 +168,7 @@ class TransferSettlementTest {
     }
 
     @Test
-    void anAnswerForATransferWithinTheBankIsAConflict() {
+    void shouldReportConflictForInternalTransfer() {
         Transfer withinTheBank = Transfer.completed(new TransferCommand("key-2", TestIbans.A, TestIbans.B,
                 new BigDecimal("10.00"), "UAH", "Lunch"), NOW.minusSeconds(60));
         ReflectionTestUtils.setField(withinTheBank, "id", UUID.randomUUID());
@@ -186,7 +181,7 @@ class TransferSettlementTest {
     }
 
     @Test
-    void anAnswerForAnUnknownTransferChangesNothing() {
+    void shouldIgnoreAnswerForUnknownTransfer() {
         assertThat(settlement.settle(UUID.randomUUID(), "REPORT-1")).isEqualTo(Outcome.UNKNOWN_TRANSFER);
         assertThat(settlement.reject(UUID.randomUUID(), "REPORT-1")).isEqualTo(Outcome.UNKNOWN_TRANSFER);
 
@@ -195,7 +190,7 @@ class TransferSettlementTest {
     }
 
     @Test
-    void theAccountsAreLockedInIbanOrderLikeEveryMovementOfMoney() {
+    void shouldLockAccountsInIbanOrder() {
         settlement.settle(pending.getId(), "REPORT-1");
 
         ArgumentCaptor<String> locked = ArgumentCaptor.forClass(String.class);
@@ -206,9 +201,8 @@ class TransferSettlementTest {
     }
 
     @Test
-    void aReturnedDescriptionStillFitsALedgerEntry() {
+    void shouldShortenReturnedDescriptionToFit() {
         String longest = "x".repeat(140);
-        // The emoji is the 140th character: cutting at 140 chars instead of code points would split it in two.
         String emojiAtTheCut = "y".repeat(129) + "\uD83D\uDE00" + "z";
 
         assertThat(TransferSettlement.returned("Rent")).isEqualTo("Returned: Rent");

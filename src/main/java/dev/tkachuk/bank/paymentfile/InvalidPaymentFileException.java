@@ -4,7 +4,6 @@ import dev.tkachuk.bank.common.error.BankException;
 import dev.tkachuk.bank.common.error.ErrorCode;
 import java.util.List;
 
-/** The file was rejected as a whole. The violations are shown to the caller, so each should name its field. */
 public class InvalidPaymentFileException extends BankException {
 
     public InvalidPaymentFileException(List<String> violations) {

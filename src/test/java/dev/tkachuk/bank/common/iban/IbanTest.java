@@ -18,15 +18,15 @@ class IbanTest {
             "UA213223130000026007233566001",
             "DE89370400440532013000",
             "GB82WEST12345698765432",
-            "NO9386011117947",                     // 15 characters, the shortest IBAN in use
+            "NO9386011117947",
             TestIbans.A
     })
-    void acceptsValidIbans(String raw) {
+    void shouldAcceptValidIbans(String raw) {
         assertThat(Iban.parse(raw).value()).isEqualTo(raw);
     }
 
     @Test
-    void normalisesWhatPeopleType() {
+    void shouldNormaliseTypedIban() {
         Iban iban = Iban.parse(" ua21 3223 1300 0002 6007 2335 6600 1 ");
 
         assertThat(iban.value()).isEqualTo("UA213223130000026007233566001");
@@ -34,16 +34,15 @@ class IbanTest {
     }
 
     @Test
-    void twoSpellingsOfOneIbanAreEqual() {
+    void shouldTreatTwoSpellingsAsEqual() {
         Iban typed = Iban.parse("ua21 3223 1300 0002 6007 2335 6600 1");
         Iban compact = Iban.parse("UA213223130000026007233566001");
 
         assertThat(typed).isEqualTo(compact).hasSameHashCodeAs(compact);
     }
 
-    /** With a Turkish default locale, "i".toUpperCase() is a dotted capital I, which no IBAN contains. */
     @Test
-    void ignoresTheDefaultLocale() {
+    void shouldIgnoreDefaultLocale() {
         Locale saved = Locale.getDefault();
         Locale.setDefault(Locale.of("tr", "TR"));
         try {
@@ -54,45 +53,41 @@ class IbanTest {
         }
     }
 
-    /**
-     * Inputs marked "good check digits" pass MOD 97, so only the rule in their comment can refuse them.
-     * Without that, MOD 97 would refuse them first and the rule would go untested.
-     */
     @ParameterizedTest(name = "[{index}] \"{0}\"")
     @NullAndEmptySource
     @ValueSource(strings = {
             "   ",
-            "UA223223130000026007233566001",       // check digits do not match
-            "DE89370400440532013001",              // check digits do not match
-            "UA17322313000002600723356600",        // Ukrainian IBAN of 28 characters, good check digits
-            "UA6132231300000260072335660011",      // Ukrainian IBAN of 30 characters, good check digits
-            "NO698601111794",                      // 14 characters, good check digits
-            "DE553704004405320130000000000000000", // 35 characters, good check digits
-            "UA21-3223-1300-0002-6007-2335-6600-1", // only spaces are removed, never dashes
-            "1A913223130000026007233566001",       // country code must be letters, good check digits
-            "UAAV3223130000026007233566001",       // check digits must be digits, though MOD 97 gives 1
-            "UA21322313000002600723356600é",       // letters are A to Z only
-            "UA84399999000000000000000000１"   // fullwidth 1 (U+FF11) at the end: Character.digit reads it as 1
+            "UA223223130000026007233566001",
+            "DE89370400440532013001",
+            "UA17322313000002600723356600",
+            "UA6132231300000260072335660011",
+            "NO698601111794",
+            "DE553704004405320130000000000000000",
+            "UA21-3223-1300-0002-6007-2335-6600-1",
+            "1A913223130000026007233566001",
+            "UAAV3223130000026007233566001",
+            "UA21322313000002600723356600é",
+            "UA84399999000000000000000000１"
     })
-    void refusesAnythingElse(String raw) {
+    void shouldRejectInvalidIbans(String raw) {
         assertThat(codeOf(() -> Iban.parse(raw))).isEqualTo(ErrorCode.INVALID_IBAN);
     }
 
     @Test
-    void tryParseGivesTheIbanOrNothing() {
+    void shouldReturnIbanOrEmptyFromTryParse() {
         assertThat(Iban.tryParse("ua84 3999 9900 0000 0000 0000 0000 1")).contains(Iban.parse(TestIbans.A));
         assertThat(Iban.tryParse("UA223223130000026007233566001")).isEmpty();
         assertThat(Iban.tryParse(null)).isEmpty();
     }
 
     @Test
-    void aUkrainianIbanNamesItsBank() {
+    void shouldReadUkrainianBankCode() {
         assertThat(Iban.parse(TestIbans.A).ukrainianBankCode()).contains("399999");
         assertThat(Iban.parse(TestIbans.PARTNER).ukrainianBankCode()).contains("388888");
     }
 
     @Test
-    void anIbanAbroadHasNoUkrainianBankCode() {
+    void shouldHaveNoBankCodeForForeignIban() {
         assertThat(Iban.parse(TestIbans.GERMAN).ukrainianBankCode()).isEmpty();
     }
 }

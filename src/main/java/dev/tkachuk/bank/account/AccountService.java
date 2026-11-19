@@ -33,7 +33,6 @@ public class AccountService {
         return accounts.save(Account.open(iban, holderName.strip(), currency, clock.instant()));
     }
 
-    /** Customer accounts only: the bank's own accounts never show through the API. */
     public List<Account> list() {
         return accounts.findAllByKindOrderByIdAsc(AccountKind.CUSTOMER);
     }
@@ -43,10 +42,6 @@ public class AccountService {
         return accounts.findByIban(compact).filter(Account::isCustomer).orElseThrow(() -> accountNotFound(compact));
     }
 
-    /**
-     * The same steps a transfer uses, for one account: validate the amount, lock the row,
-     * change the balance, then record the ledger entry with the new balance.
-     */
     @Transactional
     public Account deposit(String iban, BigDecimal amount, String description) {
         BigDecimal validAmount = Amounts.requireValid(amount);
@@ -63,7 +58,7 @@ public class AccountService {
         return ledgerEntries.findByAccountIdOrderByIdAsc(get(iban).getId());
     }
 
-    /** Lookups accept what people type (spaces, lower case); validation happens when an IBAN is created. */
+    // Lookups accept spaces and lower case, as people type IBANs.
     private static String compact(String iban) {
         return iban.replace(" ", "").toUpperCase(Locale.ROOT);
     }

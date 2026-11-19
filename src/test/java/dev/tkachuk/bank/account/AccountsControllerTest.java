@@ -23,7 +23,6 @@ import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
-/** The HTTP layer alone: routes, JSON shape, validation and error format, with the service mocked. */
 @WebMvcTest(AccountsController.class)
 @Import(AccountMapperImpl.class)
 class AccountsControllerTest {
@@ -35,7 +34,7 @@ class AccountsControllerTest {
     private AccountService accountService;
 
     @Test
-    void returnsAnAccountAsJson() throws Exception {
+    void shouldReturnAccountAsJson() throws Exception {
         when(accountService.get(TestIbans.A)).thenReturn(TestAccounts.account(1, TestIbans.A, "UAH", "850.00"));
 
         mockMvc.perform(get("/api/v1/accounts/{iban}", TestIbans.A))
@@ -47,7 +46,7 @@ class AccountsControllerTest {
     }
 
     @Test
-    void listsAccounts() throws Exception {
+    void shouldListAccounts() throws Exception {
         when(accountService.list()).thenReturn(List.of(
                 TestAccounts.account(1, TestIbans.A, "UAH", "1.00"),
                 TestAccounts.account(2, TestIbans.B, "UAH", "2.00")));
@@ -59,7 +58,7 @@ class AccountsControllerTest {
     }
 
     @Test
-    void unknownAccountIsA404Problem() throws Exception {
+    void shouldReturn404ProblemForUnknownAccount() throws Exception {
         when(accountService.get(anyString()))
                 .thenThrow(new BankException(ErrorCode.ACCOUNT_NOT_FOUND, "Account not found"));
 
@@ -72,7 +71,7 @@ class AccountsControllerTest {
     }
 
     @Test
-    void anInvalidIbanIsA400ProblemWithIbanInCapitals() throws Exception {
+    void shouldReturn400ProblemForInvalidIban() throws Exception {
         when(accountService.get(anyString()))
                 .thenThrow(new BankException(ErrorCode.INVALID_IBAN, "IBAN check digits do not match"));
 
@@ -83,7 +82,7 @@ class AccountsControllerTest {
     }
 
     @Test
-    void depositBelowOneCentIsRejectedBeforeTheService() throws Exception {
+    void shouldRejectDepositBelowOneCentBeforeService() throws Exception {
         mockMvc.perform(post("/api/v1/accounts/{iban}/deposits", TestIbans.A)
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"amount\": -5}"))
@@ -95,7 +94,7 @@ class AccountsControllerTest {
     }
 
     @Test
-    void openAccountRequiresEveryField() throws Exception {
+    void shouldRequireEveryFieldToOpenAccount() throws Exception {
         mockMvc.perform(post("/api/v1/accounts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"holderName\": \"Artem\"}"))
@@ -106,7 +105,7 @@ class AccountsControllerTest {
     }
 
     @Test
-    void unknownCurrencyIsABadRequest() throws Exception {
+    void shouldReturn400ForUnknownCurrency() throws Exception {
         mockMvc.perform(post("/api/v1/accounts")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"iban\": \"%s\", \"holderName\": \"Artem\", \"currency\": \"GBP\"}"
@@ -117,7 +116,7 @@ class AccountsControllerTest {
     }
 
     @Test
-    void businessErrorsKeepTheirCode() throws Exception {
+    void shouldKeepErrorCodeOfBusinessErrors() throws Exception {
         when(accountService.deposit(anyString(), any(), anyString()))
                 .thenThrow(new BankException(ErrorCode.INVALID_AMOUNT, "At most two decimal places"));
 

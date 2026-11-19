@@ -18,10 +18,7 @@ import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
-/**
- * An account: a customer's, or one of the bank's own (see AccountKind). The balance only changes through
- * credit() and debit(), and every change must be recorded as a LedgerEntry in the same transaction.
- */
+/** A customer's account or one of the bank's own. Every balance change is recorded as a LedgerEntry. */
 @Entity
 @Table(name = "accounts")
 @Getter
@@ -48,17 +45,13 @@ public class Account {
     @Column(nullable = false, length = 20)
     private AccountKind kind;
 
-    /** Optimistic locking: a lost update fails instead of silently overwriting a balance. */
+    // A lost update fails instead of overwriting the balance.
     @Version
     private long version;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    /**
-     * A new customer account with a zero balance. Taking an Iban (not a String) means the IBAN was already
-     * validated. The bank's own accounts are not opened here: the V2 migration creates them.
-     */
     public static Account open(Iban iban, String holderName, String currency, Instant createdAt) {
         Account account = new Account();
         account.iban = iban.value();
@@ -70,26 +63,18 @@ public class Account {
         return account;
     }
 
-    /** False for the bank's own accounts, which the API treats as if they did not exist. */
     public boolean isCustomer() {
         return kind == AccountKind.CUSTOMER;
     }
 
-    /** Puts money into the account. The amount must come from Amounts.requireValid. */
     public void credit(BigDecimal amount) {
         requirePositive(amount);
         balance = balance.add(amount);
     }
 
-    /**
-     * Takes money out of the account. The amount must come from Amounts.requireValid. Refuses with
-     * INSUFFICIENT_FUNDS when the balance is too small, and then leaves the balance unchanged; the settlement
-     * account never refuses, since it stands for the bank's position at the National Bank, which can go below zero
-     * (the V3 migration allows it there and nowhere else).
-     */
+    /** Refuses with INSUFFICIENT_FUNDS and changes nothing; only the settlement account may go below zero. */
     public void debit(BigDecimal amount) {
         requirePositive(amount);
-        // compareTo, not equals: equals also compares the scale, so 100.0 and 100.00 would differ.
         if (kind != AccountKind.SETTLEMENT && balance.compareTo(amount) < 0) {
             throw new BankException(ErrorCode.INSUFFICIENT_FUNDS,
                     "Account " + iban + " does not have " + amount.toPlainString() + " " + currency);

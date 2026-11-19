@@ -1,16 +1,10 @@
 package dev.tkachuk.bank.account;
 
-/**
- * Whose account it is. Customers own CUSTOMER accounts; the other two are the bank's own, which a transfer to
- * another bank passes through (see InternalAccounts). Only CUSTOMER accounts are visible through the API.
- */
+/** Only CUSTOMER accounts are visible through the API; the other two are the bank's own. */
 public enum AccountKind {
     CUSTOMER,
-    /** Holds the money of transfers to other banks until those banks answer. */
+    // holds transfers to other banks until they answer
     TRANSIT,
-    /**
-     * Stands for the bank's account at the National Bank, through which other banks pay and are paid. Payments in
-     * take money from it, so its balance can be below zero.
-     */
+    // the bank's account at the National Bank; may go below zero
     SETTLEMENT
 }

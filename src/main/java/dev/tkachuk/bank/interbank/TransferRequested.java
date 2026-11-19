@@ -5,11 +5,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * The event bank-integration turns into a pacs.008 for the other bank. Its contract is the JSON these components
- * make, the same fields as bank-integration's own TransferRequested; the record is kept apart from the internal
- * InterbankTransferPending so that the contract changes only when both sides agree.
- */
+/** A transfer to another bank, for bank-integration, keyed by the payer's IBAN. */
 public record TransferRequested(
         UUID transferId,
         String fromIban,
@@ -21,7 +17,6 @@ public record TransferRequested(
         String description,
         Instant requestedAt) {
 
-    /** Keyed by the payer's IBAN, so one account's transfers keep their order. */
     public static final String TOPIC = "interbank.transfers";
 
     static TransferRequested of(InterbankTransferPending pending) {

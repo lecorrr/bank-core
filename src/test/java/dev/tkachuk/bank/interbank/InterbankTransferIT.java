@@ -21,15 +21,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.testcontainers.kafka.KafkaContainer;
 
-/**
- * Transfers to another bank, through a real PostgreSQL and a real Kafka. The test plays bank-integration: it reads
- * the TransferRequested events bank-core sends, and answers with TransferStatusChanged events as bank-integration
- * does once the other bank's pacs.002 has come. Kafka here gives each topic one partition, so bank-core reads the
- * answers in the order the test sends them.
- */
 class InterbankTransferIT extends IntegrationTest {
 
-    /** Generous: the first test also waits for bank-core's consumer to join its group. */
     private static final Duration TIMEOUT = Duration.ofSeconds(30);
 
     @Autowired
@@ -44,7 +37,7 @@ class InterbankTransferIT extends IntegrationTest {
     }
 
     @Test
-    void theTransferWaitsForTheOtherBankAndGoesOutAsAnEvent() throws Exception {
+    void shouldHoldTransferAndPublishEvent() throws Exception {
         String transferId = sendToPartner("key-1");
 
         assertThat(balanceOf(TestIbans.A)).isEqualByComparingTo("850.00");
@@ -65,12 +58,11 @@ class InterbankTransferIT extends IntegrationTest {
         assertThat(requestedAt).as("an ISO-8601 time, as bank-integration reads it").isInstanceOf(String.class);
         assertThat(Instant.parse((String) requestedAt)).isNotNull();
 
-        // Once Kafka has the event, the outbox is empty again.
         await().atMost(TIMEOUT).untilAsserted(() -> assertThat(countRows("event_publication")).isZero());
     }
 
     @Test
-    void acceptedByTheOtherBankTheTransferIsCompleted() throws Exception {
+    void shouldCompleteTransferWhenAccepted() throws Exception {
         String transferId = sendToPartner("key-1");
 
         answer(transferId, "SETTLED", "REPORT-1");
@@ -84,7 +76,7 @@ class InterbankTransferIT extends IntegrationTest {
     }
 
     @Test
-    void refusedByTheOtherBankTheMoneyComesBack() throws Exception {
+    void shouldReturnMoneyWhenRejected() throws Exception {
         String transferId = sendToPartner("key-1");
 
         answer(transferId, "REJECTED", "REPORT-1");
@@ -107,14 +99,13 @@ class InterbankTransferIT extends IntegrationTest {
     }
 
     @Test
-    void repeatedAndContradictingAnswersChangeNothing() throws Exception {
+    void shouldIgnoreRepeatedAndConflictingAnswers() throws Exception {
         String first = sendToPartner("key-1");
         String second = sendToPartner("key-2");
 
         answer(first, "SETTLED", "REPORT-1");
         answer(first, "SETTLED", "REPORT-1");
         answer(first, "REJECTED", "REPORT-2");
-        // Read after the three above, so once it is applied they have been handled too.
         answer(second, "SETTLED", "REPORT-3");
 
         awaitStatus(second, "COMPLETED");
@@ -127,7 +118,7 @@ class InterbankTransferIT extends IntegrationTest {
     }
 
     @Test
-    void anEventThatCannotBeReadIsSkippedAndTheNextOneStillApplies() throws Exception {
+    void shouldSkipUnreadableEventAndContinue() throws Exception {
         String transferId = sendToPartner("key-1");
 
         bankIntegration.publish(TransferStatusChanged.TOPIC, transferId, "not json");
@@ -137,7 +128,7 @@ class InterbankTransferIT extends IntegrationTest {
     }
 
     @Test
-    void theBanksOwnAccountsStayHidden() throws Exception {
+    void shouldHideBankOwnAccounts() throws Exception {
         mockMvc.perform(get("/api/v1/accounts"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
@@ -146,7 +137,6 @@ class InterbankTransferIT extends IntegrationTest {
                 .andExpect(status().isNotFound());
     }
 
-    /** Makes the transfer through the API, as a customer would, and returns its id. */
     private String sendToPartner(String idempotencyKey) throws Exception {
         String body = """
                 {"fromIban": "%s", "toIban": "%s", "toName": "Olena Kovalenko",
@@ -168,7 +158,6 @@ class InterbankTransferIT extends IntegrationTest {
                 .andExpect(jsonPath("$.status").value(expected)));
     }
 
-    /** Answers as bank-integration does: JSON text, keyed by the transfer id. */
     private void answer(String transferId, String status, String reportId) throws Exception {
         bankIntegration.publish(TransferStatusChanged.TOPIC, transferId, """
                 {"transferId": "%s", "status": "%s", "reportId": "%s", "reportedAt": "2026-11-17T20:17:09Z"}

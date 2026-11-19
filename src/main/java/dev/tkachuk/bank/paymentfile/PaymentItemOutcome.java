@@ -3,7 +3,6 @@ package dev.tkachuk.bank.paymentfile;
 import dev.tkachuk.bank.common.error.ErrorCode;
 import java.util.UUID;
 
-/** What happened to one payment of a batch. Rejected items carry the error code and reason instead of a transfer. */
 public record PaymentItemOutcome(
         String endToEndId,
         Status status,

@@ -8,7 +8,6 @@ public enum PaymentFileFormat {
     JSON,
     XML;
 
-    /** Decides by the file extension first, then by the declared content type. */
     public static PaymentFileFormat detect(String filename, String contentType) {
         String name = filename == null ? "" : filename.toLowerCase(Locale.ROOT);
         if (name.endsWith(".json")) {

@@ -39,10 +39,6 @@ import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/**
- * A payment from a customer of another bank, with the repositories mocked: credited from the settlement account,
- * refused, or recognised as a copy. IncomingTransferIT runs the same through Kafka and PostgreSQL.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class IncomingTransfersTest {
@@ -62,7 +58,6 @@ class IncomingTransfersTest {
     private final List<Transfer> savedTransfers = new ArrayList<>();
     private final List<Object> published = new ArrayList<>();
     private final ApplicationEventPublisher events = published::add;
-    /** The locks taken and the lookups made, in order. */
     private final List<String> calls = new ArrayList<>();
     private IncomingTransfers incoming;
     private Account payee;
@@ -85,7 +80,6 @@ class IncomingTransfersTest {
                 return Optional.of(account);
             });
         }
-        // Saving gives a transfer its id, as the database would, and findByUetr finds what was saved.
         when(transfers.save(any(Transfer.class))).thenAnswer(call -> {
             Transfer transfer = call.getArgument(0);
             ReflectionTestUtils.setField(transfer, "id", UUID.randomUUID());
@@ -107,7 +101,7 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void aPaymentToACustomerMovesTheMoneyFromTheSettlementAccount() {
+    void shouldCreditPaymentFromSettlementAccount() {
         Received received = incoming.receive(payment(TestIbans.A, "250.00", "UAH"));
 
         assertThat(received.outcome()).isEqualTo(Outcome.CREDITED);
@@ -139,7 +133,7 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void theDecisionGoesOutAsAnEventWithTheTransfer() {
+    void shouldPublishDecisionWithTransfer() {
         incoming.receive(payment(TestIbans.A, "250.00", "UAH"));
 
         Transfer transfer = savedTransfers.getFirst();
@@ -149,7 +143,7 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void aPaymentToAnAccountThatIsNotACustomersIsRefusedAndMovesNoMoney() {
+    void shouldRejectPaymentToNonCustomerAccount() {
         for (String notACustomer : new String[] {TestIbans.UNKNOWN, TestIbans.TRANSIT, TestIbans.SETTLEMENT,
                 "UA00399999000000000000000000X"}) {
             savedTransfers.clear();
@@ -168,7 +162,7 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void aPaymentInAnotherCurrencyThanThePayeesAccountIsRefused() {
+    void shouldRejectPaymentInOtherCurrency() {
         Received received = incoming.receive(payment(TestIbans.D_USD, "250.00", "UAH"));
 
         assertThat(received.outcome()).isEqualTo(Outcome.REJECTED);
@@ -179,7 +173,7 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void aCopyOfAPaymentGetsTheSameDecisionAgainAndMovesNoMoreMoney() {
+    void shouldRepeatDecisionForDuplicatePayment() {
         incoming.receive(payment(TestIbans.A, "250.00", "UAH"));
         savedEntries.clear();
 
@@ -195,7 +189,7 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void aCopyOfARefusedPaymentIsRefusedAgainEvenIfTheAccountExistsByNow() {
+    void shouldKeepRejectionForDuplicatePayment() {
         incoming.receive(payment(TestIbans.UNKNOWN, "250.00", "UAH"));
         Account openedSince = TestAccounts.account(9, TestIbans.UNKNOWN, "UAH", "0.00");
         when(accounts.findByIbanForUpdate(TestIbans.UNKNOWN)).thenReturn(Optional.of(openedSince));
@@ -208,18 +202,17 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void theSettlementAccountAndThePayeeAreLockedInIbanOrderBeforeTheUetrIsLookedUp() {
+    void shouldLockAccountsInIbanOrderBeforeUetrLookup() {
         incoming.receive(payment(TestIbans.A, "10.00", "UAH"));
 
         assertThat(TestIbans.SETTLEMENT.compareTo(TestIbans.A)).as("the test needs the settlement IBAN to sort first")
                 .isNegative();
-        // A copy that comes at the same time waits at the first lock, and then finds this payment's transfer.
         assertThat(calls).containsExactly("lock " + TestIbans.SETTLEMENT, "lock " + TestIbans.A, "find uetr");
         verify(accounts, times(2)).findByIbanForUpdate(any(String.class));
     }
 
     @Test
-    void aPayeeIbanIsLookedUpAsAccountsAreKept() {
+    void shouldLookUpPayeeIbanInCompactForm() {
         Received received = incoming.receive(payment("ua84 3999 9900 0000 0000 0000 0000 1", "10.00", "UAH"));
 
         assertThat(received.outcome()).isEqualTo(Outcome.CREDITED);
@@ -227,7 +220,7 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void namesAndTheDescriptionAreKeptWithoutSurroundingSpaces() {
+    void shouldStripNamesAndDescription() {
         incoming.receive(new IncomingTransferCommand(UETR, TestIbans.PARTNER, " Olena Kovalenko ", TestIbans.A,
                 " Artem Demo ", new BigDecimal("10"), "UAH", " For the concert tickets ", RECEIVED_AT));
 
@@ -239,7 +232,7 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void nothingIsSavedOrPublishedWhenTheSettlementAccountIsMissing() {
+    void shouldSaveNothingWithoutSettlementAccount() {
         when(accounts.findByIbanForUpdate(TestIbans.SETTLEMENT)).thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> incoming.receive(payment(TestIbans.A, "10.00", "UAH")))
@@ -259,7 +252,6 @@ class IncomingTransfersTest {
                 new BigDecimal(amount), currency, "For the concert tickets", RECEIVED_AT);
     }
 
-    /** Every event published is a decision; the cast fails the test otherwise. */
     private List<IncomingTransferDecision> publishedDecisions() {
         return published.stream().map(IncomingTransferDecision.class::cast).toList();
     }

@@ -16,7 +16,7 @@ import org.springframework.test.web.servlet.RequestBuilder;
 class AccountOpeningIT extends IntegrationTest {
 
     @Test
-    void opensAnAccountWithAZeroBalance() throws Exception {
+    void shouldOpenAccountWithZeroBalance() throws Exception {
         mockMvc.perform(open("ua84 3999 9900 0000 0000 0000 0000 1", "  Artem Tkachuk  ", "UAH"))
                 .andExpect(status().isCreated())
                 .andExpect(header().string("Location", "/api/v1/accounts/" + TestIbans.A))
@@ -31,7 +31,7 @@ class AccountOpeningIT extends IntegrationTest {
     }
 
     @Test
-    void refusesAnIbanWithWrongCheckDigits() throws Exception {
+    void shouldRejectIbanWithWrongCheckDigits() throws Exception {
         mockMvc.perform(open("UA853999990000000000000000001", "Artem Tkachuk", "UAH"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_IBAN"));
@@ -40,7 +40,7 @@ class AccountOpeningIT extends IntegrationTest {
     }
 
     @Test
-    void refusesASecondAccountWithTheSameIban() throws Exception {
+    void shouldRejectDuplicateIban() throws Exception {
         mockMvc.perform(open(TestIbans.A, "Artem Tkachuk", "UAH")).andExpect(status().isCreated());
 
         mockMvc.perform(open("ua84 3999 9900 0000 0000 0000 0000 1", "Someone Else", "USD"))

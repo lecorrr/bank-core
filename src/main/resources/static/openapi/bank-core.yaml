@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Bank Core API
-  version: 0.5.0
+  version: 0.5.1
   description: |
     Accounts, transfers and payment files for a small digital bank.
     This file is the contract: the Spring interfaces and DTOs are generated from it at build time.

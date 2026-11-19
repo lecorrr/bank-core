@@ -16,7 +16,7 @@ class XmlPaymentFileReaderTest {
     private final XmlPaymentFileReader reader = new XmlPaymentFileReader();
 
     @Test
-    void readsEveryPaymentOfAValidFile() {
+    void shouldReadEveryPaymentOfValidFile() {
         PaymentBatch batch = reader.read(PaymentFiles.open("valid-batch.xml"));
 
         assertThat(batch.messageId()).isEqualTo("MSG-TEST-XML-0001");
@@ -36,22 +36,21 @@ class XmlPaymentFileReaderTest {
     }
 
     @Test
-    void reportsSchemaViolationsWithTheirValues() {
+    void shouldReportSchemaViolationsWithValues() {
         List<String> violations = violationsOf(PaymentFiles.open("invalid-schema.xml"));
 
         assertThat(String.join("\n", violations)).contains("GBP", "200.555");
     }
 
     @Test
-    void checksTheTotalsInTheGroupHeader() {
+    void shouldCheckGroupHeaderTotals() {
         List<String> violations = violationsOf(PaymentFiles.open("wrong-totals.xml"));
 
         assertThat(String.join("\n", violations)).contains("NbOfTxs", "CtrlSum");
     }
 
-    /** NbOfTxs is any positive integer to the schema, so it is compared at any size, not parsed into an int. */
     @Test
-    void comparesAHeaderCountOfAnySize() {
+    void shouldCompareHeaderCountOfAnySize() {
         String hugeCount = new String(PaymentFiles.bytes("valid-batch.xml"), StandardCharsets.UTF_8)
                 .replace("<NbOfTxs>2</NbOfTxs>", "<NbOfTxs>99999999999999999999</NbOfTxs>");
 
@@ -59,22 +58,20 @@ class XmlPaymentFileReaderTest {
     }
 
     @Test
-    void refusesTheSameEndToEndIdTwice() {
+    void shouldRejectRepeatedEndToEndId() {
         assertThat(violationsOf(PaymentFiles.open("duplicate-end-to-end-id.xml")))
                 .anySatisfy(violation -> assertThat(violation).contains("E2E-1"));
     }
 
-    /** XXE: a DOCTYPE could make the parser read /etc/passwd into the message id, or call other servers. */
     @Test
-    void refusesExternalEntitiesWithoutReadingThem() {
+    void shouldRejectExternalEntitiesWithoutReadingThem() {
         List<String> violations = violationsOf(PaymentFiles.open("xxe-attack.xml"));
 
         assertThat(violations).isNotEmpty().noneSatisfy(violation -> assertThat(violation).contains("root:"));
     }
 
-    /** Even a DOCTYPE with nothing in it: a payment file never needs one, and refusing all of them is simplest. */
     @Test
-    void refusesAnyDoctype() {
+    void shouldRejectDoctype() {
         String withDoctype = new String(PaymentFiles.bytes("valid-batch.xml"), StandardCharsets.UTF_8)
                 .replace("<Document ", "<!DOCTYPE Document>\n<Document ");
 
@@ -82,12 +79,12 @@ class XmlPaymentFileReaderTest {
     }
 
     @Test
-    void refusesSomethingThatIsNotXml() {
+    void shouldRejectNonXml() {
         assertThat(violationsOf(PaymentFiles.open("not-xml.xml"))).isNotEmpty();
     }
 
     @Test
-    void refusesBytesThatAreNotText() {
+    void shouldRejectBinaryContent() {
         byte[] start = "<?xml version=\"1.0\" encoding=\"UTF-8\"?><Document>".getBytes(StandardCharsets.UTF_8);
         byte[] notUtf8 = Arrays.copyOf(start, start.length + 2);
         notUtf8[start.length] = (byte) 0xFF;
@@ -97,7 +94,7 @@ class XmlPaymentFileReaderTest {
     }
 
     @Test
-    void refusesAnEmptyFile() {
+    void shouldRejectEmptyFile() {
         assertThat(violationsOf(new ByteArrayInputStream(new byte[0]))).isNotEmpty();
     }
 

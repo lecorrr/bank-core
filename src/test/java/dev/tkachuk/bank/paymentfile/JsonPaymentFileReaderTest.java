@@ -15,7 +15,7 @@ class JsonPaymentFileReaderTest {
     private final JsonPaymentFileReader reader = new JsonPaymentFileReader();
 
     @Test
-    void readsEveryPaymentOfAValidFile() {
+    void shouldReadEveryPaymentOfValidFile() {
         PaymentBatch batch = reader.read(PaymentFiles.open("valid-batch.json"));
 
         assertThat(batch.messageId()).isEqualTo("MSG-TEST-JSON-0001");
@@ -30,13 +30,12 @@ class JsonPaymentFileReaderTest {
         assertThat(first.remittanceInfo()).isEqualTo("Invoice 17");
         PaymentInstruction second = batch.payments().get(1);
         assertThat(second.endToEndId()).isEqualTo("E2E-2");
-        // Read as the decimal written in the file, never through a double.
         assertThat(second.amount()).isEqualByComparingTo("200.50");
         assertThat(second.remittanceInfo()).isNull();
     }
 
     @Test
-    void keepsEachAmountExactlyAsWritten() {
+    void shouldKeepAmountsExactlyAsWritten() {
         PaymentBatch batch = reader.read(PaymentFiles.open("valid-batch.json"));
 
         assertThat(batch.payments().get(0).amount().toPlainString()).isEqualTo("150.00");
@@ -44,7 +43,7 @@ class JsonPaymentFileReaderTest {
     }
 
     @Test
-    void reportsEverySchemaViolationAtOnce() {
+    void shouldReportAllSchemaViolations() {
         List<String> violations = violationsOf(PaymentFiles.open("invalid-schema.json"));
 
         assertThat(violations).hasSizeGreaterThanOrEqualTo(5);
@@ -53,9 +52,8 @@ class JsonPaymentFileReaderTest {
                 .contains("priority", "creditorIban", "amount", "creditorName", "currency");
     }
 
-    /** The XML schema refuses this too: a third decimal would have to be rounded away, and money is never rounded. */
     @Test
-    void refusesAnAmountWithMoreThanTwoDecimals() {
+    void shouldRejectAmountWithMoreThanTwoDecimals() {
         String thirdDecimal = """
                 {"messageId": "MSG-1", "debtorIban": "%s", "payments": [
                   {"endToEndId": "E2E-1", "creditorIban": "%s", "creditorName": "Olena Kovalenko",
@@ -69,7 +67,7 @@ class JsonPaymentFileReaderTest {
     }
 
     @Test
-    void acceptsTrailingZerosAfterTheSecondDecimal() {
+    void shouldAcceptTrailingZerosAfterSecondDecimal() {
         String trailingZero = """
                 {"messageId": "MSG-1", "debtorIban": "%s", "payments": [
                   {"endToEndId": "E2E-1", "creditorIban": "%s", "creditorName": "Olena Kovalenko",
@@ -80,14 +78,13 @@ class JsonPaymentFileReaderTest {
     }
 
     @Test
-    void refusesTheSameEndToEndIdTwice() {
+    void shouldRejectRepeatedEndToEndId() {
         assertThat(violationsOf(PaymentFiles.open("duplicate-end-to-end-id.json")))
                 .anySatisfy(violation -> assertThat(violation).contains("E2E-1"));
     }
 
-    /** "The last one wins" would let a file say two amounts for one payment. */
     @Test
-    void refusesAFieldGivenTwice() {
+    void shouldRejectDuplicateField() {
         String amountTwice = """
                 {"messageId": "MSG-1", "debtorIban": "%s", "payments": [
                   {"endToEndId": "E2E-1", "creditorIban": "%s", "creditorName": "Olena Kovalenko",
@@ -98,7 +95,7 @@ class JsonPaymentFileReaderTest {
     }
 
     @Test
-    void refusesAnythingAfterTheDocument() {
+    void shouldRejectTrailingContent() {
         String validThenMore = new String(PaymentFiles.bytes("valid-batch.json"), StandardCharsets.UTF_8)
                 + "{\"messageId\": \"MSG-2\"}";
 
@@ -106,24 +103,24 @@ class JsonPaymentFileReaderTest {
     }
 
     @Test
-    void refusesBytesThatAreNotText() {
+    void shouldRejectBinaryContent() {
         byte[] notUtf8 = {'{', '"', 'm', '"', ':', '"', (byte) 0xFF, (byte) 0xFE, '"', '}'};
 
         assertThat(violationsOf(new ByteArrayInputStream(notUtf8))).isNotEmpty();
     }
 
     @Test
-    void refusesSomethingThatIsNotJson() {
+    void shouldRejectNonJson() {
         assertThat(violationsOf(PaymentFiles.open("not-json.json"))).isNotEmpty();
     }
 
     @Test
-    void refusesAnEmptyFile() {
+    void shouldRejectEmptyFile() {
         assertThat(violationsOf(new ByteArrayInputStream(new byte[0]))).isNotEmpty();
     }
 
     @Test
-    void refusesAFileWithoutPayments() {
+    void shouldRejectFileWithoutPayments() {
         String noPayments = """
                 {"messageId": "MSG-1", "debtorIban": "%s", "payments": []}
                 """.formatted(TestIbans.A);

@@ -44,10 +44,6 @@ import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
-/**
- * The transfer rules, with the repositories and the event publisher mocked: fast, and every case is easy to set
- * up. TransferConcurrencyIT checks the locking against a real PostgreSQL, InterbankTransferIT the events.
- */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
 class TransferServiceTest {
@@ -83,7 +79,6 @@ class TransferServiceTest {
         for (Account account : List.of(a, b, usd, transit, settlement)) {
             when(accounts.findByIbanForUpdate(account.getIban())).thenReturn(Optional.of(account));
         }
-        // Saving gives a transfer its id, as the database would. Either save style is fine.
         when(transfers.save(any(Transfer.class))).thenAnswer(call -> withId(call.getArgument(0)));
         when(transfers.saveAndFlush(any(Transfer.class))).thenAnswer(call -> withId(call.getArgument(0)));
         when(ledgerEntries.save(any(LedgerEntry.class))).thenAnswer(call -> {
@@ -100,7 +95,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void movesTheMoneyAndRecordsBothSides() {
+    void shouldMoveMoneyAndRecordBothSides() {
         TransferResult result = service.transfer(command("key-1", TestIbans.A, TestIbans.B, "150.00", "Rent"));
 
         assertThat(result.replayed()).isFalse();
@@ -130,7 +125,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void storesTheRequestNormalised() {
+    void shouldStoreNormalisedRequest() {
         String typedFrom = "ua84 3999 9900 0000 0000 0000 0000 1";
         String typedTo = TestIbans.B.toLowerCase(Locale.ROOT);
 
@@ -143,7 +138,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void locksBothAccountsInTheSameOrderWhateverTheDirection() {
+    void shouldLockAccountsInIbanOrder() {
         service.transfer(command("key-1", TestIbans.A, TestIbans.B, "10.00", "There"));
         service.transfer(command("key-2", TestIbans.B, TestIbans.A, "10.00", "And back"));
 
@@ -157,7 +152,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void refusesWhenTheMoneyIsNotThere() {
+    void shouldRejectWhenFundsAreInsufficient() {
         assertThat(codeOf(() -> service.transfer(command("key-1", TestIbans.A, TestIbans.B, "1000.01", "Too much"))))
                 .isEqualTo(ErrorCode.INSUFFICIENT_FUNDS);
 
@@ -165,7 +160,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void refusesATransferToTheSameAccount() {
+    void shouldRejectTransferToSameAccount() {
         String sameAccountTypedDifferently = TestIbans.A.toLowerCase(Locale.ROOT);
 
         assertThat(codeOf(() -> service.transfer(
@@ -176,7 +171,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void refusesWhenTheCurrenciesDoNotMatch() {
+    void shouldRejectCurrencyMismatch() {
         assertThat(codeOf(() -> service.transfer(command("key-1", TestIbans.A, TestIbans.D_USD, "10.00", "To USD"))))
                 .as("UAH account to USD account")
                 .isEqualTo(ErrorCode.CURRENCY_MISMATCH);
@@ -191,7 +186,7 @@ class TransferServiceTest {
     @ParameterizedTest
     @NullSource
     @ValueSource(strings = {"0", "-1", "10.555"})
-    void refusesAmountsThatAreNotMoney(String amount) {
+    void shouldRejectInvalidAmounts(String amount) {
         assertThat(codeOf(() -> service.transfer(command("key-1", TestIbans.A, TestIbans.B, amount, "Odd amount"))))
                 .isEqualTo(ErrorCode.INVALID_AMOUNT);
 
@@ -199,7 +194,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void refusesInvalidIbansBeforeTouchingTheDatabase() {
+    void shouldRejectInvalidIbansBeforeDatabase() {
         String wrongCheckDigits = "UA853999990000000000000000001";
 
         assertThat(codeOf(() -> service.transfer(command("key-1", wrongCheckDigits, TestIbans.B, "1.00", "From"))))
@@ -212,7 +207,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void refusesUnknownAccounts() {
+    void shouldRejectUnknownAccounts() {
         assertThat(codeOf(() -> service.transfer(command("key-1", TestIbans.A, TestIbans.UNKNOWN, "1.00", "To"))))
                 .isEqualTo(ErrorCode.ACCOUNT_NOT_FOUND);
         assertThat(codeOf(() -> service.transfer(command("key-2", TestIbans.UNKNOWN, TestIbans.A, "1.00", "From"))))
@@ -222,9 +217,8 @@ class TransferServiceTest {
     }
 
     @Test
-    void repeatedRequestReturnsTheOriginalWithoutMovingMoneyAgain() {
+    void shouldReturnOriginalForRepeatedRequest() {
         Transfer original = existingTransfer("key-1", "150.00", "Rent");
-        // The money already moved, so a replay must not look at the balance again.
         ReflectionTestUtils.setField(a, "balance", new BigDecimal("0.00"));
 
         TransferResult result = service.transfer(command("key-1", TestIbans.A, TestIbans.B, "150.00", "Rent"));
@@ -238,7 +232,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void replayComparesTheNormalisedRequest() {
+    void shouldCompareNormalisedRequestOnReplay() {
         Transfer original = existingTransfer("key-1", "150.00", "Rent");
 
         String typedFrom = TestIbans.A.toLowerCase(Locale.ROOT);
@@ -250,7 +244,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void refusesTheSameKeyForADifferentRequest() {
+    void shouldRejectSameKeyForDifferentRequest() {
         existingTransfer("key-1", "150.00", "Rent");
 
         assertThat(codeOf(() -> service.transfer(command("key-1", TestIbans.A, TestIbans.B, "200.00", "Rent"))))
@@ -260,14 +254,14 @@ class TransferServiceTest {
     }
 
     @Test
-    void aTransferWithinTheBankPublishesNothing() {
+    void shouldPublishNothingForInternalTransfer() {
         service.transfer(command("key-1", TestIbans.A, TestIbans.B, "150.00", "Rent"));
 
         verify(events, never()).publishEvent(any(Object.class));
     }
 
     @Test
-    void aTransferToAnotherBankWaitsInTheTransitAccount() {
+    void shouldHoldInterbankTransferInTransitAccount() {
         Transfer transfer = service.transfer(toPartner("key-1", "150.00")).transfer();
 
         assertThat(transfer.getStatus()).isEqualTo(TransferStatus.PENDING);
@@ -289,7 +283,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void aTransferToAnotherBankAsksForItToBeSent() {
+    void shouldPublishInterbankTransferPending() {
         Transfer transfer = service.transfer(toPartner("key-1", "150.00")).transfer();
 
         ArgumentCaptor<Object> event = ArgumentCaptor.forClass(Object.class);
@@ -300,7 +294,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void theTransitAccountIsLockedInIbanOrderLikeAnyOther() {
+    void shouldLockTransitAccountInIbanOrder() {
         service.transfer(toPartner("key-1", "10.00"));
 
         ArgumentCaptor<String> locked = ArgumentCaptor.forClass(String.class);
@@ -311,7 +305,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void anotherBankNeedsThePayeesName() {
+    void shouldRequirePayeeNameForOtherBank() {
         for (String missingName : new String[] {null, "   "}) {
             assertThat(codeOf(() -> service.transfer(new TransferCommand("key-1", TestIbans.A, TestIbans.PARTNER,
                     missingName, new BigDecimal("10.00"), "UAH", "Rent"))))
@@ -323,18 +317,17 @@ class TransferServiceTest {
     }
 
     @Test
-    void anotherBankIsPaidInHryvniaOnly() {
+    void shouldRequireUahForOtherBank() {
         assertThat(codeOf(() -> service.transfer(new TransferCommand("key-1", TestIbans.D_USD, TestIbans.PARTNER,
                 "Olena Kovalenko", new BigDecimal("10.00"), "USD", "In dollars"))))
                 .isEqualTo(ErrorCode.CURRENCY_MISMATCH);
 
-        // The transit account would refuse dollars too, but only after rows were locked for a request that cannot work.
         verify(accounts, never()).findByIbanForUpdate(any());
         assertNothingChanged();
     }
 
     @Test
-    void aUahTransferToAnotherBankFromADollarAccountIsRefused() {
+    void shouldRejectUahTransferFromUsdAccount() {
         assertThat(codeOf(() -> service.transfer(new TransferCommand("key-1", TestIbans.D_USD, TestIbans.PARTNER,
                 "Olena Kovalenko", new BigDecimal("10.00"), "UAH", "Wrong account"))))
                 .isEqualTo(ErrorCode.CURRENCY_MISMATCH);
@@ -343,7 +336,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void banksAbroadAreRefusedBeforeTouchingTheDatabase() {
+    void shouldRejectForeignBanksBeforeDatabase() {
         assertThat(codeOf(() -> service.transfer(new TransferCommand("key-1", TestIbans.A, TestIbans.GERMAN,
                 "Hans Becker", new BigDecimal("10.00"), "UAH", "Abroad"))))
                 .isEqualTo(ErrorCode.UNSUPPORTED_DESTINATION);
@@ -353,7 +346,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void customersCannotPayIntoOrOutOfTheBanksOwnAccounts() {
+    void shouldHideBankOwnAccountsFromCustomers() {
         assertThat(codeOf(() -> service.transfer(command("key-1", TestIbans.A, TestIbans.TRANSIT, "10.00", "In"))))
                 .isEqualTo(ErrorCode.ACCOUNT_NOT_FOUND);
         assertThat(codeOf(() -> service.transfer(command("key-2", TestIbans.SETTLEMENT, TestIbans.A, "10.00",
@@ -364,7 +357,7 @@ class TransferServiceTest {
     }
 
     @Test
-    void aRepeatedTransferToAnotherBankIsNotSentAgain() {
+    void shouldNotPublishRepeatedInterbankTransfer() {
         Transfer original = withId(Transfer.pending(new TransferCommand("key-1", TestIbans.A, TestIbans.PARTNER,
                 "Olena Kovalenko", new BigDecimal("150.00"), "UAH", "Rent"), NOW.minusSeconds(60)));
         when(transfers.findByIdempotencyKey("key-1")).thenReturn(Optional.of(original));

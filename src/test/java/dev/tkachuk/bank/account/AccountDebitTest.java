@@ -16,28 +16,28 @@ class AccountDebitTest {
     private final Account account = TestAccounts.account(1, TestIbans.A, "UAH", "100.00");
 
     @Test
-    void takesMoneyOut() {
+    void shouldDebitBalance() {
         account.debit(new BigDecimal("30.00"));
 
         assertThat(account.getBalance()).isEqualByComparingTo("70.00");
     }
 
     @Test
-    void canEmptyTheAccount() {
+    void shouldAllowDebitToZero() {
         account.debit(new BigDecimal("100.00"));
 
         assertThat(account.getBalance()).isEqualByComparingTo("0.00");
     }
 
     @Test
-    void refusesToGoBelowZeroAndChangesNothing() {
+    void shouldRejectOverdraftAndKeepBalance() {
         assertThat(codeOf(() -> account.debit(new BigDecimal("100.01")))).isEqualTo(ErrorCode.INSUFFICIENT_FUNDS);
 
         assertThat(account.getBalance()).isEqualByComparingTo("100.00");
     }
 
     @Test
-    void theSettlementAccountGoesBelowZeroWhereTheTransitAccountRefuses() {
+    void shouldAllowOnlySettlementAccountBelowZero() {
         Account settlement = TestAccounts.internal(6, TestIbans.SETTLEMENT, AccountKind.SETTLEMENT, "100.00");
         Account transit = TestAccounts.internal(5, TestIbans.TRANSIT, AccountKind.TRANSIT, "100.00");
 
@@ -51,14 +51,14 @@ class AccountDebitTest {
 
     @ParameterizedTest
     @ValueSource(strings = {"0", "-1"})
-    void refusesAmountsThatAreNotPositive(BigDecimal amount) {
+    void shouldRejectNonPositiveAmount(BigDecimal amount) {
         assertThat(codeOf(() -> account.debit(amount))).isEqualTo(ErrorCode.INVALID_AMOUNT);
 
         assertThat(account.getBalance()).isEqualByComparingTo("100.00");
     }
 
     @Test
-    void refusesNoAmount() {
+    void shouldRejectMissingAmount() {
         assertThat(codeOf(() -> account.debit(null))).isEqualTo(ErrorCode.INVALID_AMOUNT);
     }
 }
