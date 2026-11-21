@@ -5,6 +5,7 @@ import dev.tkachuk.bank.account.AccountRepository;
 import dev.tkachuk.bank.account.InternalAccounts;
 import dev.tkachuk.bank.common.Amounts;
 import dev.tkachuk.bank.common.BankProperties;
+import dev.tkachuk.bank.common.CurrentTrace;
 import dev.tkachuk.bank.common.error.BankException;
 import dev.tkachuk.bank.common.error.ErrorCode;
 import dev.tkachuk.bank.common.iban.Iban;
@@ -36,6 +37,7 @@ public class TransferService {
     private final BankProperties bank;
     private final InternalAccounts internalAccounts;
     private final ApplicationEventPublisher events;
+    private final CurrentTrace currentTrace;
 
     @Transactional
     public TransferResult transfer(TransferCommand command) {
@@ -80,7 +82,8 @@ public class TransferService {
 
         // Stored with the transfer and sent to Kafka after the commit (transactional outbox).
         if (toAnotherBank) {
-            events.publishEvent(InterbankTransferPending.of(transfer, from.getHolderName()));
+            events.publishEvent(
+                    InterbankTransferPending.of(transfer, from.getHolderName(), currentTrace.traceParent()));
         }
 
         return new TransferResult(transfer, false);

@@ -7,7 +7,7 @@ for one Maven module: the boundaries are packages, and `LayeringTest` enforces t
 
 | Package | Contains | May use |
 |---|---|---|
-| `common` | `Amounts`, `BankException` and `ErrorCode`, `Iban`, the `Clock`; `common.web`: request id filter, `ApiExceptionHandler` | nothing else of ours |
+| `common` | `Amounts`, `BankException` and `ErrorCode`, `Iban`, the `Clock`, `CurrentTrace`; `common.web`: request id filter, `ApiExceptionHandler` | nothing else of ours |
 | `ledger` | `LedgerEntry`: append-only statement lines | `common` |
 | `account` | `Account`, deposits, statements, the accounts API; `InternalAccounts` (transit and settlement) | `common`, `ledger` |
 | `transfer` | `Transfer` and idempotency, the transfers API; `TransferSettlement` (answers from other banks); `IncomingTransfers` (payments from other banks) | `common`, `ledger`, `account` |
@@ -18,8 +18,8 @@ The table is `MAY_DEPEND_ON` in `LayeringTest`. The same test also checks:
 
 - only `*Controller` and `*Mapper` classes see the generated API types;
 - only controllers and `common.web` import HTTP types;
-- only `interbank` imports Kafka or Spring Modulith types. `TransferService` and `IncomingTransfers` publish
-  plain Spring events, and `interbank` decides how they look on Kafka.
+- only `interbank` imports Kafka, Spring messaging or Spring Modulith types. `TransferService` and
+  `IncomingTransfers` publish plain Spring events, and `interbank` decides how they look on Kafka.
 
 ## Flows
 
@@ -38,8 +38,8 @@ A transfer to another bank (an IBAN whose bank code is not `bank.code`):
 
 ```
 POST /transfers -> one transaction: customer DEBIT, TRANSIT CREDIT, Transfer PENDING,
-                   InterbankTransferPending stored in event_publication (outbox)
-after the commit -> TransferRequested on interbank.transfers (key: payer's IBAN)
+                   InterbankTransferPending (with the request's traceparent) stored in event_publication (outbox)
+after the commit -> TransferRequested on interbank.transfers (key: payer's IBAN, traceparent header)
 the answer on interbank.transfer-statuses -> TransferSettlement:
     SETTLED:  TRANSIT DEBIT, SETTLEMENT CREDIT, Transfer COMPLETED
     REJECTED: TRANSIT DEBIT, customer CREDIT ("Returned: ..."), Transfer REJECTED
@@ -54,7 +54,7 @@ IncomingTransferReceived on interbank.incoming-transfers (key: payee's IBAN) -> 
     no such customer:   REJECTED, UNKNOWN_ACCOUNT, no ledger entries
     other currency:     REJECTED, CURRENCY_MISMATCH, no ledger entries
     otherwise:          SETTLEMENT DEBIT, payee CREDIT, COMPLETED
-    IncomingTransferDecision stored in the outbox -> IncomingTransferDecided (key: UETR)
+    IncomingTransferDecision stored in the outbox -> IncomingTransferDecided (key: UETR, the payment's trace)
 ```
 
 ## Rules
@@ -73,7 +73,8 @@ IncomingTransferReceived on interbank.incoming-transfers (key: payee's IBAN) -> 
 - **The contract** `bank-core.yaml` changes first; the build regenerates the interfaces.
 - **Configuration** per machine comes from environment variables (`DB_URL`, `DB_USER`, `DB_PASSWORD`,
   `KAFKA_BOOTSTRAP_SERVERS`, `SPRING_PROFILES_ACTIVE`).
-- **Logs** carry the request id; in Docker they are ECS JSON.
+- **Logs** carry the trace id, span id and request id. In Docker they are ECS JSON (`trace.id`, `span.id`,
+  `http.request.id`); `EcsLogsTest` checks the field names.
 
 ## Decisions
 
@@ -82,6 +83,12 @@ IncomingTransferReceived on interbank.incoming-transfers (key: payee's IBAN) -> 
   the API and checked at startup.
 - **Outbox with Spring Modulith** (event publication registry over JDBC, Kafka externalization), no Kafka
   Connect. Delivered events are deleted; failed ones are resent every 30 s by `FailedEventResubmission`.
+- **The trace waits in the outbox with the event.** Modulith sends events on another thread after the commit,
+  and resends run on a scheduler, so the request's span is gone by then. `CurrentTrace` stores its W3C
+  `traceparent` in the event, and `InterbankConfiguration` turns it into the record's `traceparent` header (the
+  same idea as the `tracingspancontext` column of Debezium's outbox). KafkaTemplate's observation stays off: it
+  would write the sending thread's trace instead. The listeners have observation on, so their log lines
+  continue bank-integration's trace. Nothing is exported yet; Project 3 adds that.
 - **Kafka is optional at runtime**: without it bank-core serves everything else.
 - **Unreadable events are logged and skipped**, since no retry fixes them. Other failures (the database is down)
   are retried every 5 s, forever: skipping would leave a transfer PENDING or a payment without a decision.

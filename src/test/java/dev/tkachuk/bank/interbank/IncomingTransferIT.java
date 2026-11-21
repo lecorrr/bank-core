@@ -11,8 +11,10 @@ import com.jayway.jsonpath.JsonPath;
 import dev.tkachuk.bank.support.IntegrationTest;
 import dev.tkachuk.bank.support.KafkaEvents;
 import dev.tkachuk.bank.support.TestIbans;
+import dev.tkachuk.bank.support.Traces;
 import java.time.Duration;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
@@ -73,6 +75,18 @@ class IncomingTransferIT extends IntegrationTest {
     }
 
     @Test
+    void shouldAnswerInThePaymentsTrace() throws Exception {
+        String uetr = UUID.randomUUID().toString();
+
+        receive(uetr, TestIbans.A, "250.00",
+                Traces.traceParent("5f2c4b8a9d1e4f7a8b3c6d0e1f2a3b4c", "a1b2c3d4e5f60718"));
+
+        ConsumerRecord<String, String> decision = bankIntegration.eventAbout(IncomingTransferDecided.TOPIC, uetr);
+        assertThat(Traces.traceIdOf(KafkaEvents.header(decision, Traces.TRACE_PARENT)))
+                .isEqualTo("5f2c4b8a9d1e4f7a8b3c6d0e1f2a3b4c");
+    }
+
+    @Test
     void shouldRejectPaymentToUnknownAccount() throws Exception {
         String uetr = UUID.randomUUID().toString();
 
@@ -128,12 +142,17 @@ class IncomingTransferIT extends IntegrationTest {
     }
 
     private void receive(String uetr, String toIban, String amount) throws Exception {
+        receive(uetr, toIban, amount, null);
+    }
+
+    private void receive(String uetr, String toIban, String amount, String traceParent) throws Exception {
         bankIntegration.publish(IncomingTransferReceived.TOPIC, toIban, """
                 {"uetr": "%s",
                  "fromIban": "%s", "fromName": "Olena Kovalenko",
                  "toIban": "%s", "toName": "Artem Demo",
                  "amount": %s, "currency": "UAH", "description": "For the concert tickets",
                  "receivedAt": "2026-11-18T09:15:00Z"}
-                """.formatted(uetr, TestIbans.PARTNER, toIban, amount));
+                """.formatted(uetr, TestIbans.PARTNER, toIban, amount),
+                traceParent == null ? Map.of() : Map.of(Traces.TRACE_PARENT, traceParent));
     }
 }

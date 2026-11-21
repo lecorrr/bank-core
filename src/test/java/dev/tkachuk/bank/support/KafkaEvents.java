@@ -1,5 +1,6 @@
 package dev.tkachuk.bank.support;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -13,6 +14,7 @@ import org.apache.kafka.clients.consumer.KafkaConsumer;
 import org.apache.kafka.clients.producer.KafkaProducer;
 import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.clients.producer.ProducerRecord;
+import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
 import org.testcontainers.kafka.KafkaContainer;
@@ -29,11 +31,23 @@ public final class KafkaEvents {
     }
 
     public void publish(String topic, String key, String value) throws Exception {
+        publish(topic, key, value, Map.of());
+    }
+
+    public void publish(String topic, String key, String value, Map<String, String> headers) throws Exception {
         Map<String, Object> config = Map.of(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, kafka.getBootstrapServers());
+        ProducerRecord<String, String> record = new ProducerRecord<>(topic, key, value);
+        headers.forEach((name, text) -> record.headers().add(name, text.getBytes(StandardCharsets.UTF_8)));
         try (KafkaProducer<String, String> producer =
                 new KafkaProducer<>(config, new StringSerializer(), new StringSerializer())) {
-            producer.send(new ProducerRecord<>(topic, key, value)).get(timeout.toSeconds(), TimeUnit.SECONDS);
+            producer.send(record).get(timeout.toSeconds(), TimeUnit.SECONDS);
         }
+    }
+
+    /** The record's last header with that name as text, or null. */
+    public static String header(ConsumerRecord<String, String> record, String name) {
+        Header header = record.headers().lastHeader(name);
+        return header == null ? null : new String(header.value(), StandardCharsets.UTF_8);
     }
 
     public ConsumerRecord<String, String> eventAbout(String topic, String id) {

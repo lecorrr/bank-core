@@ -12,6 +12,7 @@ import dev.tkachuk.bank.account.Account;
 import dev.tkachuk.bank.account.AccountKind;
 import dev.tkachuk.bank.account.AccountRepository;
 import dev.tkachuk.bank.account.InternalAccounts;
+import dev.tkachuk.bank.common.CurrentTrace;
 import dev.tkachuk.bank.ledger.EntryDirection;
 import dev.tkachuk.bank.ledger.EntryType;
 import dev.tkachuk.bank.ledger.LedgerEntry;
@@ -46,6 +47,7 @@ class IncomingTransfersTest {
     private static final Instant NOW = Instant.parse("2026-11-18T09:15:02Z");
     private static final Instant RECEIVED_AT = Instant.parse("2026-11-18T09:15:00Z");
     private static final UUID UETR = UUID.fromString("3b9f7a52-1c4d-4e8f-a0b6-7d2e5c9f1a34");
+    private static final String TRACE_PARENT = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 
     @Mock
     private AccountRepository accounts;
@@ -53,6 +55,8 @@ class IncomingTransfersTest {
     private TransferRepository transfers;
     @Mock
     private LedgerEntryRepository ledgerEntries;
+    @Mock
+    private CurrentTrace currentTrace;
 
     private final List<LedgerEntry> savedEntries = new ArrayList<>();
     private final List<Transfer> savedTransfers = new ArrayList<>();
@@ -69,7 +73,8 @@ class IncomingTransfersTest {
     void setUp() {
         incoming = new IncomingTransfers(accounts, transfers, ledgerEntries,
                 new InternalAccounts(TestIbans.TRANSIT, TestIbans.SETTLEMENT), Clock.fixed(NOW, ZoneOffset.UTC),
-                events);
+                events, currentTrace);
+        when(currentTrace.traceParent()).thenReturn(TRACE_PARENT);
         payee = TestAccounts.account(1, TestIbans.A, "UAH", "100.00");
         usd = TestAccounts.account(4, TestIbans.D_USD, "USD", "0.00");
         transit = TestAccounts.internal(5, TestIbans.TRANSIT, AccountKind.TRANSIT, "0.00");
@@ -133,12 +138,12 @@ class IncomingTransfersTest {
     }
 
     @Test
-    void shouldPublishDecisionWithTransfer() {
+    void shouldPublishDecisionWithTransferAndTrace() {
         incoming.receive(payment(TestIbans.A, "250.00", "UAH"));
 
         Transfer transfer = savedTransfers.getFirst();
         assertThat(publishedDecisions()).containsExactly(new IncomingTransferDecision(UETR, transfer.getId(), null,
-                NOW));
+                NOW, TRACE_PARENT));
         assertThat(publishedDecisions().getFirst().credited()).isTrue();
     }
 

@@ -4,6 +4,7 @@ import dev.tkachuk.bank.account.Account;
 import dev.tkachuk.bank.account.AccountRepository;
 import dev.tkachuk.bank.account.InternalAccounts;
 import dev.tkachuk.bank.common.Amounts;
+import dev.tkachuk.bank.common.CurrentTrace;
 import dev.tkachuk.bank.common.iban.Iban;
 import dev.tkachuk.bank.ledger.EntryType;
 import dev.tkachuk.bank.ledger.LedgerEntry;
@@ -38,6 +39,7 @@ public class IncomingTransfers {
     private final InternalAccounts internalAccounts;
     private final Clock clock;
     private final ApplicationEventPublisher events;
+    private final CurrentTrace currentTrace;
 
     @Transactional
     public Received receive(IncomingTransferCommand command) {
@@ -80,7 +82,7 @@ public class IncomingTransfers {
     }
 
     private Received decided(Outcome outcome, Transfer transfer) {
-        IncomingTransferDecision decision = IncomingTransferDecision.of(transfer);
+        IncomingTransferDecision decision = IncomingTransferDecision.of(transfer, currentTrace.traceParent());
         events.publishEvent(decision);
         return new Received(outcome, decision);
     }

@@ -13,7 +13,7 @@
 
     <groupId>dev.tkachuk</groupId>
     <artifactId>bank-core</artifactId>
-    <version>0.5.1</version>
+    <version>0.6.0</version>
     <name>bank-core</name>
     <description>Accounts, transfers and payment files for a small digital bank</description>
 
@@ -73,6 +73,23 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-kafka</artifactId>
+        </dependency>
+        <!-- Tracing with the OpenTelemetry SDK, trace ids in the logs only. No exporter yet: the
+             spring-boot-starter-opentelemetry would add the OTLP exporter and registry. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+            <exclusions>
+                <!-- spring-aop has these classes already; Spring Boot excludes it the same way -->
+                <exclusion>
+                    <groupId>aopalliance</groupId>
+                    <artifactId>aopalliance</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <!-- Transactional outbox: Spring Modulith's event publication registry (JDBC) and its Kafka support. -->
         <dependency>

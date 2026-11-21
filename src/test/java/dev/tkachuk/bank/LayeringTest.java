@@ -34,7 +34,7 @@ class LayeringTest {
             "jakarta.servlet");
 
     private static final List<String> MESSAGING_PACKAGES = List.of("org.apache.kafka", "org.springframework.kafka",
-            "org.springframework.modulith");
+            "org.springframework.modulith", "org.springframework.messaging");
 
     private static List<SourceFile> sources;
 

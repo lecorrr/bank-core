@@ -1,11 +1,13 @@
 openapi: 3.0.3
 info:
   title: Bank Core API
-  version: 0.5.1
+  version: 0.6.0
   description: |
     Accounts, transfers and payment files for a small digital bank.
     This file is the contract: the Spring interfaces and DTOs are generated from it at build time.
     Errors use RFC 9457 problem details with an extra `code` field (see the Problem schema).
+    A request may carry a W3C `traceparent` header; bank-core continues that trace, also for a transfer to
+    another bank, whose events carry it to bank-integration.
 servers:
   - url: /
 tags:

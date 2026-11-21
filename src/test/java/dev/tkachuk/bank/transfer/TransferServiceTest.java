@@ -13,6 +13,7 @@ import dev.tkachuk.bank.account.AccountKind;
 import dev.tkachuk.bank.account.AccountRepository;
 import dev.tkachuk.bank.account.InternalAccounts;
 import dev.tkachuk.bank.common.BankProperties;
+import dev.tkachuk.bank.common.CurrentTrace;
 import dev.tkachuk.bank.common.error.ErrorCode;
 import dev.tkachuk.bank.ledger.EntryDirection;
 import dev.tkachuk.bank.ledger.EntryType;
@@ -49,6 +50,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 class TransferServiceTest {
 
     private static final Instant NOW = Instant.parse("2026-11-09T10:00:00Z");
+    private static final String TRACE_PARENT = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
 
     @Mock
     private AccountRepository accounts;
@@ -58,6 +60,8 @@ class TransferServiceTest {
     private LedgerEntryRepository ledgerEntries;
     @Mock
     private ApplicationEventPublisher events;
+    @Mock
+    private CurrentTrace currentTrace;
 
     private final List<LedgerEntry> savedEntries = new ArrayList<>();
     private TransferService service;
@@ -70,7 +74,9 @@ class TransferServiceTest {
     @BeforeEach
     void setUp() {
         service = new TransferService(accounts, transfers, ledgerEntries, Clock.fixed(NOW, ZoneOffset.UTC),
-                new BankProperties("399999"), new InternalAccounts(TestIbans.TRANSIT, TestIbans.SETTLEMENT), events);
+                new BankProperties("399999"), new InternalAccounts(TestIbans.TRANSIT, TestIbans.SETTLEMENT), events,
+                currentTrace);
+        when(currentTrace.traceParent()).thenReturn(TRACE_PARENT);
         a = TestAccounts.account(1, TestIbans.A, "UAH", "1000.00");
         b = TestAccounts.account(2, TestIbans.B, "UAH", "0.00");
         usd = TestAccounts.account(4, TestIbans.D_USD, "USD", "1000.00");
@@ -283,14 +289,14 @@ class TransferServiceTest {
     }
 
     @Test
-    void shouldPublishInterbankTransferPending() {
+    void shouldPublishInterbankTransferPendingWithTheRequestsTrace() {
         Transfer transfer = service.transfer(toPartner("key-1", "150.00")).transfer();
 
         ArgumentCaptor<Object> event = ArgumentCaptor.forClass(Object.class);
         verify(events).publishEvent(event.capture());
         assertThat(event.getValue()).isEqualTo(new InterbankTransferPending(transfer.getId(), TestIbans.A,
                 "Holder of " + TestIbans.A, TestIbans.PARTNER, "Olena Kovalenko", new BigDecimal("150.00"), "UAH",
-                "Rent", NOW));
+                "Rent", NOW, TRACE_PARENT));
     }
 
     @Test

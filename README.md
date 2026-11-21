@@ -4,7 +4,7 @@ A small core-banking service: customer accounts, deposits, transfers within the 
 and from them, and bulk payment files in JSON or ISO 20022 XML. Payments between banks go through
 [bank-integration](https://github.com/lecorrr/bank-integration). This is Project 1 of three.
 
-**Status: 0.5.1.** Every build runs the unit and integration tests and an 80 % line-coverage gate.
+**Status: 0.6.0.** Every build runs the unit and integration tests and an 80 % line-coverage gate.
 
 - **Contract-first REST API**: the OpenAPI file `src/main/resources/static/openapi/bank-core.yaml` generates the
   interfaces and DTOs; errors are RFC 9457 problem details with a `code`.
@@ -15,9 +15,12 @@ and from them, and bulk payment files in JSON or ISO 20022 XML. Payments between
   Modulith) and come back over Kafka.
 - **Payment files**: JSON checked against a JSON Schema, `pain.001` XML against an XSD (DOCTYPE refused); each
   payment is its own transfer, so uploading a file again pays nothing twice.
+- **One trace per payment**: every log line has the trace and span id (ECS JSON in Docker). A transfer's trace
+  runs from the REST call through Kafka to bank-integration and back with the answer: the W3C `traceparent`
+  travels in the record headers and is stored with the outbox event, so a resend continues the same trace.
 
 Stack: Java 21, Spring Boot 4.1, Spring Data JPA, PostgreSQL 17, Flyway, Spring Kafka, Spring Modulith 2.1,
-MapStruct, Lombok, Testcontainers, JUnit, Maven. The design is in [ARCHITECTURE.md](ARCHITECTURE.md).
+Micrometer Tracing with OpenTelemetry, MapStruct, Lombok, Testcontainers, JUnit, Maven. The design is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Set up (Arch Linux or Ubuntu)
 
@@ -65,7 +68,7 @@ Or run both in Docker after building the jar:
 docker compose up --build
 ```
 
-The log shows the running version (`bank-core 0.5.1 started`). Swagger UI is at
+The log shows the running version (`bank-core 0.6.0 started`). Swagger UI is at
 <http://localhost:8080/swagger-ui.html>, health at <http://localhost:8080/actuator/health>.
 
 Payments with other banks need bank-integration's stack, which runs the Kafka on `localhost:9092`
@@ -108,6 +111,13 @@ Transfer to the partner bank (bank code `388888`, with bank-integration running)
 curl -sSi -X POST localhost:8080/api/v1/transfers -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-2' -d '{"fromIban": "UA843999990000000000000000001", "toIban": "UA643888880000000000000000777", "toName": "Olena Kovalenko", "amount": 150.00, "currency": "UAH", "description": "Rent"}'
 ```
 
+The same with a trace of your own: every log line about this transfer, in bank-core and in bank-integration,
+then shows trace id `0af7651916cd43dd8448eb211c80319c`.
+
+```
+curl -sSi -X POST localhost:8080/api/v1/transfers -H 'Content-Type: application/json' -H 'Idempotency-Key: demo-3' -H 'traceparent: 00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01' -d '{"fromIban": "UA843999990000000000000000001", "toIban": "UA643888880000000000000000777", "toName": "Olena Kovalenko", "amount": 150.00, "currency": "UAH", "description": "Rent"}'
+```
+
 Receive 250 UAH from the partner bank's customer; the payee's statement then shows an `INCOMING` entry. A payment
 to `UA733999990000000000000000005` (no such account) or to the USD account is rejected and moves no money.
 
@@ -142,7 +152,7 @@ docker compose exec postgres psql -U bank -d bank -c "SELECT iban, kind, balance
 
 ```
 src/main/java/dev/tkachuk/bank/
-  common/        amounts, errors, IBAN, clock, request id filter, error handler
+  common/        amounts, errors, IBAN, clock, current trace, request id filter, error handler
   ledger/        ledger entries
   account/       accounts, deposits, statements
   transfer/      transfers, settlement of transfers to other banks, payments from other banks

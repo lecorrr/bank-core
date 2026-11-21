@@ -104,7 +104,7 @@ class IncomingTransferListenerTest {
     @Test
     void shouldPassPaymentToIncomingTransfers() {
         when(incomingTransfers.receive(COMMAND)).thenReturn(new Received(Outcome.CREDITED,
-                new IncomingTransferDecision(UETR, UUID.randomUUID(), null, RECEIVED_AT)));
+                new IncomingTransferDecision(UETR, UUID.randomUUID(), null, RECEIVED_AT, null)));
 
         listener.on(record(PAYMENT));
 

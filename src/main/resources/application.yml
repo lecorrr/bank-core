@@ -54,6 +54,10 @@ management:
     health:
       probes:
         enabled: true
+  tracing:
+    sampling:
+      # Keep every trace. Nothing is exported yet; logs carry the trace ids either way.
+      probability: 1.0
 
 springdoc:
   swagger-ui:
@@ -65,4 +69,13 @@ logging:
     org.apache.kafka.clients.consumer.ConsumerConfig: WARN
     org.apache.kafka.clients.producer.ProducerConfig: WARN
   pattern:
-    correlation: "[%X{requestId:-}] "   # request id from RequestIdFilter on every console line
+    # trace and span id from tracing, request id from RequestIdFilter, on every plain-text line
+    correlation: "[%X{traceId:-},%X{spanId:-}] [%X{requestId:-}] "
+  structured:
+    # For ECS JSON logs (LOGGING_STRUCTURED_FORMAT_CONSOLE=ecs, set in compose.yaml): MDC keys to their ECS
+    # field names. The brackets keep the camel case of the keys.
+    json:
+      rename:
+        "[traceId]": trace.id
+        "[spanId]": span.id
+        "[requestId]": http.request.id

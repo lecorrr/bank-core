@@ -12,13 +12,19 @@ import com.jayway.jsonpath.JsonPath;
 import dev.tkachuk.bank.support.IntegrationTest;
 import dev.tkachuk.bank.support.KafkaEvents;
 import dev.tkachuk.bank.support.TestIbans;
+import dev.tkachuk.bank.support.Traces;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
 import org.testcontainers.kafka.KafkaContainer;
 
 class InterbankTransferIT extends IntegrationTest {
@@ -59,6 +65,38 @@ class InterbankTransferIT extends IntegrationTest {
         assertThat(Instant.parse((String) requestedAt)).isNotNull();
 
         await().atMost(TIMEOUT).untilAsserted(() -> assertThat(countRows("event_publication")).isZero());
+    }
+
+    @Test
+    void shouldContinueTheCallersTraceInTheEvent() throws Exception {
+        String callerTrace = Traces.traceParent("0af7651916cd43dd8448eb211c80319c", "b7ad6b7169203331");
+
+        String transferId = sendToPartner("key-1", callerTrace);
+
+        ConsumerRecord<String, String> event = bankIntegration.eventAbout(TransferRequested.TOPIC, transferId);
+        String traceParent = KafkaEvents.header(event, Traces.TRACE_PARENT);
+        assertThat(Traces.traceIdOf(traceParent)).isEqualTo("0af7651916cd43dd8448eb211c80319c");
+        assertThat(Traces.spanIdOf(traceParent)).as("a span of bank-core's own").isNotEqualTo("b7ad6b7169203331");
+    }
+
+    @Test
+    void shouldStartATraceForACallWithoutOne() throws Exception {
+        String transferId = sendToPartner("key-1");
+
+        ConsumerRecord<String, String> event = bankIntegration.eventAbout(TransferRequested.TOPIC, transferId);
+        assertThat(Traces.traceIdOf(KafkaEvents.header(event, Traces.TRACE_PARENT))).isNotBlank();
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void shouldLogTheAnswerInBankIntegrationsTrace(CapturedOutput output) throws Exception {
+        String transferId = sendToPartner("key-1");
+
+        answer(transferId, "SETTLED", "REPORT-1",
+                Traces.traceParent("4bf92f3577b34da6a3ce929d0e0e4736", "00f067aa0ba902b7"));
+
+        assertThat(Traces.awaitLogLine(output, "Transfer " + transferId + " is SETTLED", TIMEOUT))
+                .contains("4bf92f3577b34da6a3ce929d0e0e4736");
     }
 
     @Test
@@ -138,14 +176,22 @@ class InterbankTransferIT extends IntegrationTest {
     }
 
     private String sendToPartner(String idempotencyKey) throws Exception {
+        return sendToPartner(idempotencyKey, null);
+    }
+
+    private String sendToPartner(String idempotencyKey, String traceParent) throws Exception {
         String body = """
                 {"fromIban": "%s", "toIban": "%s", "toName": "Olena Kovalenko",
                  "amount": 150.00, "currency": "UAH", "description": "Rent"}
                 """.formatted(TestIbans.A, TestIbans.PARTNER);
-        String response = mockMvc.perform(post("/api/v1/transfers")
-                        .header("Idempotency-Key", idempotencyKey)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content(body))
+        MockHttpServletRequestBuilder request = post("/api/v1/transfers")
+                .header("Idempotency-Key", idempotencyKey)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body);
+        if (traceParent != null) {
+            request.header(Traces.TRACE_PARENT, traceParent);
+        }
+        String response = mockMvc.perform(request)
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.status").value("PENDING"))
                 .andReturn().getResponse().getContentAsString();
@@ -159,8 +205,13 @@ class InterbankTransferIT extends IntegrationTest {
     }
 
     private void answer(String transferId, String status, String reportId) throws Exception {
+        answer(transferId, status, reportId, null);
+    }
+
+    private void answer(String transferId, String status, String reportId, String traceParent) throws Exception {
         bankIntegration.publish(TransferStatusChanged.TOPIC, transferId, """
                 {"transferId": "%s", "status": "%s", "reportId": "%s", "reportedAt": "2026-11-17T20:17:09Z"}
-                """.formatted(transferId, status, reportId));
+                """.formatted(transferId, status, reportId),
+                traceParent == null ? Map.of() : Map.of(Traces.TRACE_PARENT, traceParent));
     }
 }
