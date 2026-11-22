@@ -1,0 +1,15 @@
+# Inside the cluster only: providers reach bank-core's data through bank-open-api, never directly.
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "bank-core.name" . }}
+  labels:
+    {{- include "bank-core.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  selector:
+    {{- include "bank-core.selectorLabels" . | nindent 4 }}
+  ports:
+    - name: http
+      port: {{ .Values.service.port }}
+      targetPort: http

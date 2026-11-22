@@ -4,7 +4,7 @@ A small core-banking service: customer accounts, deposits, transfers within the 
 and from them, and bulk payment files in JSON or ISO 20022 XML. Payments between banks go through
 [bank-integration](https://github.com/lecorrr/bank-integration). This is Project 1 of three.
 
-**Status: 0.6.0.** Every build runs the unit and integration tests and an 80 % line-coverage gate.
+**Status: 0.7.0.** Every build runs the unit and integration tests and an 80 % line-coverage gate.
 
 - **Contract-first REST API**: the OpenAPI file `src/main/resources/static/openapi/bank-core.yaml` generates the
   interfaces and DTOs; errors are RFC 9457 problem details with a `code`.
@@ -18,9 +18,13 @@ and from them, and bulk payment files in JSON or ISO 20022 XML. Payments between
 - **One trace per payment**: every log line has the trace and span id (ECS JSON in Docker). A transfer's trace
   runs from the REST call through Kafka to bank-integration and back with the answer: the W3C `traceparent`
   travels in the record headers and is stored with the outbox event, so a resend continues the same trace.
+- **Runs on Kubernetes**: a Helm chart (`charts/bank-core`) for the k3d cluster of
+  [bank-open-api](https://github.com/lecorrr/bank-open-api), the open banking API in front of bank-core. The pod
+  runs as a non-root user on a read-only file system, with probes on Spring Boot's liveness and readiness; Jenkins
+  builds, pushes and deploys it ([docs/jenkins.md](docs/jenkins.md)).
 
 Stack: Java 21, Spring Boot 4.1, Spring Data JPA, PostgreSQL 17, Flyway, Spring Kafka, Spring Modulith 2.1,
-Micrometer Tracing with OpenTelemetry, MapStruct, Lombok, Testcontainers, JUnit, Maven. The design is in [ARCHITECTURE.md](ARCHITECTURE.md).
+Micrometer Tracing with OpenTelemetry, MapStruct, Lombok, Testcontainers, JUnit, Maven, Helm, Jenkins. The design is in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## Set up (Arch Linux or Ubuntu)
 
@@ -68,7 +72,7 @@ Or run both in Docker after building the jar:
 docker compose up --build
 ```
 
-The log shows the running version (`bank-core 0.6.0 started`). Swagger UI is at
+The log shows the running version (`bank-core 0.7.0 started`). Swagger UI is at
 <http://localhost:8080/swagger-ui.html>, health at <http://localhost:8080/actuator/health>.
 
 Payments with other banks need bank-integration's stack, which runs the Kafka on `localhost:9092`
@@ -163,5 +167,6 @@ src/main/resources/
   db/migration/, db/demo/         Flyway migrations and demo data
   schemas/                        JSON Schema and XSD for payment files
 scripts/setup.sh                  machine setup and first build
-Jenkinsfile, ci/jenkins/          CI pipeline and a local Jenkins (docs/jenkins.md)
+charts/bank-core/                 Helm chart for the k3d cluster of bank-open-api
+Jenkinsfile, ci/jenkins/          CI pipeline, deploy to k3d, and a local Jenkins (docs/jenkins.md)
 ```

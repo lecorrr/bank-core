@@ -1,4 +1,5 @@
 // CI for bank-core: compile, run every test (Testcontainers needs Docker), publish reports, build the image.
+// With the k3d cluster of bank-open-api (DEPLOY_TO_K3D=true, see docs/jenkins.md) it also deploys the image there.
 pipeline {
     agent any
 
@@ -6,6 +7,11 @@ pipeline {
         timeout(time: 30, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()
+    }
+
+    environment {
+        // The k3d registry, as the host's Docker sees it; the cluster pulls the same names from it.
+        REGISTRY = 'localhost:5050'
     }
 
     stages {
@@ -25,7 +31,35 @@ pipeline {
 
         stage('Docker image') {
             steps {
-                sh 'docker build -t bank-core:${BUILD_NUMBER} -t bank-core:latest .'
+                script {
+                    // The commit names the image, so the cluster always shows which code runs.
+                    env.IMAGE_TAG = sh(script: 'git rev-parse --short=12 HEAD', returnStdout: true).trim()
+                }
+                sh 'docker build -t bank-core:${IMAGE_TAG} -t bank-core:latest .'
+            }
+        }
+
+        stage('Deploy to k3d') {
+            when {
+                environment name: 'DEPLOY_TO_K3D', value: 'true'
+            }
+            steps {
+                sh 'helm lint charts/bank-core'
+                sh 'docker tag bank-core:${IMAGE_TAG} ${REGISTRY}/bank-core:${IMAGE_TAG}'
+                sh 'docker push ${REGISTRY}/bank-core:${IMAGE_TAG}'
+                // Waits until the new pod is ready; a release that never gets there is rolled back.
+                // --set-string, because --set would turn a commit id made only of digits into a number.
+                sh '''
+                    helm upgrade --install bank-core charts/bank-core --namespace bank \
+                        --set image.repository=${REGISTRY}/bank-core --set-string image.tag=${IMAGE_TAG} \
+                        --rollback-on-failure --timeout 5m
+                '''
+            }
+            post {
+                failure {
+                    sh 'kubectl --namespace bank get pods || true'
+                    sh 'kubectl --namespace bank get events --sort-by=.lastTimestamp | tail -n 20 || true'
+                }
             }
         }
     }

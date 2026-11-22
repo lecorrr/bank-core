@@ -1,0 +1,94 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "bank-core.name" . }}
+  labels:
+    {{- include "bank-core.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "bank-core.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "bank-core.labels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "bank-core.name" . }}
+      automountServiceAccountToken: false
+      # No *_SERVICE_HOST variables for every Service in the namespace; the URLs come from the values.
+      enableServiceLinks: false
+      # The namespace enforces the "restricted" Pod Security Standard; the image runs as user 10001.
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        runAsGroup: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: bank-core
+          image: {{ include "bank-core.image" . | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: DB_URL
+              value: {{ .Values.database.url | quote }}
+            - name: DB_USER
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.database.existingSecret }}
+                  key: password
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ .Values.springProfiles | quote }}
+            - name: SPRING_KAFKA_LISTENER_AUTO_STARTUP
+              value: {{ .Values.kafka.enabled | quote }}
+            {{- with .Values.kafka.bootstrapServers }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ . | quote }}
+            {{- end }}
+            - name: LOGGING_STRUCTURED_FORMAT_CONSOLE
+              value: ecs
+          # Up to two minutes to start (Flyway runs first); after that a hung JVM is restarted.
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 3
+            failureThreshold: 40
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: http
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: http
+            periodSeconds: 5
+          lifecycle:
+            # Gives the callers a moment to stop sending requests before the JVM starts shutting down.
+            preStop:
+              sleep:
+                seconds: 5
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        # Tomcat's work files and uploaded payment files; the rest of the file system is read-only.
+        - name: tmp
+          emptyDir:
+            sizeLimit: 128Mi

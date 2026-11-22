@@ -4,6 +4,7 @@ import dev.tkachuk.bank.common.CurrentTrace;
 import dev.tkachuk.bank.transfer.IncomingTransferDecision;
 import dev.tkachuk.bank.transfer.InterbankTransferPending;
 import org.apache.kafka.common.serialization.StringDeserializer;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
@@ -41,11 +42,15 @@ class InterbankConfiguration {
                 .build();
     }
 
+    // spring.kafka.listener.auto-startup=false keeps the listeners off where no Kafka runs yet, such as the k3d
+    // cluster; this factory is our own, so Spring Boot's listener settings do not reach it by themselves.
     @Bean(LISTENER_FACTORY)
     ConcurrentKafkaListenerContainerFactory<String, String> interbankListenerFactory(
-            ConsumerFactory<?, ?> consumerFactory) {
+            ConsumerFactory<?, ?> consumerFactory,
+            @Value("${spring.kafka.listener.auto-startup:true}") boolean autoStartup) {
         ConcurrentKafkaListenerContainerFactory<String, String> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
+        factory.setAutoStartup(autoStartup);
         factory.setConsumerFactory(new DefaultKafkaConsumerFactory<>(consumerFactory.getConfigurationProperties(),
                 new StringDeserializer(), new StringDeserializer()));
         // Retry every 5 s, forever: skipping an answer would leave its transfer PENDING for good.

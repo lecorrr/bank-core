@@ -1,0 +1,31 @@
+# Values for the k3d cluster of bank-open-api (its cluster/ folder). Jenkins sets image.tag to the commit it built.
+image:
+  repository: localhost:5050/bank-core
+  tag: ""   # empty: the chart's appVersion
+  pullPolicy: IfNotPresent
+
+replicaCount: 1
+
+service:
+  port: 8080
+
+# "demo" adds the four demo accounts with money, as in the compose demo.
+springProfiles: demo
+
+database:
+  url: jdbc:postgresql://postgres:5432/bank
+  # Secret with the keys username and password; bank-open-api's scripts/cluster-up.sh creates it.
+  existingSecret: bank-core-db
+
+kafka:
+  # No Kafka in the cluster yet: the listeners stay off, and transfers to other banks wait in the outbox.
+  enabled: false
+  bootstrapServers: ""
+
+# The JVM takes 60 % of the limit for its heap (see the Dockerfile); the rest is metaspace and threads.
+resources:
+  requests:
+    cpu: 100m
+    memory: 512Mi
+  limits:
+    memory: 640Mi

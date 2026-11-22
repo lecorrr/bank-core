@@ -13,7 +13,7 @@
 
     <groupId>dev.tkachuk</groupId>
     <artifactId>bank-core</artifactId>
-    <version>0.6.0</version>
+    <version>0.7.0</version>
     <name>bank-core</name>
     <description>Accounts, transfers and payment files for a small digital bank</description>
 

@@ -10,8 +10,11 @@ import dev.tkachuk.bank.transfer.IncomingTransferRejection;
 import dev.tkachuk.bank.transfer.InterbankTransferPending;
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.kafka.config.ConcurrentKafkaListenerContainerFactory;
+import org.springframework.kafka.core.DefaultKafkaConsumerFactory;
 import org.springframework.messaging.Message;
 import org.springframework.modulith.events.EventExternalizationConfiguration;
 import org.springframework.modulith.events.RoutingTarget;
@@ -74,6 +77,21 @@ class InterbankConfigurationTest {
     @Test
     void shouldPublishNothingElse() {
         assertThat(externalization.supports("an event of some other kind")).isFalse();
+    }
+
+    @Test
+    void shouldStartListenersByDefault() {
+        assertThat(listenerFactory(true).createContainer(TransferStatusChanged.TOPIC).isAutoStartup()).isTrue();
+    }
+
+    @Test
+    void shouldKeepListenersOffWhenAutoStartupIsOff() {
+        assertThat(listenerFactory(false).createContainer(TransferStatusChanged.TOPIC).isAutoStartup()).isFalse();
+    }
+
+    private static ConcurrentKafkaListenerContainerFactory<String, String> listenerFactory(boolean autoStartup) {
+        return new InterbankConfiguration().interbankListenerFactory(new DefaultKafkaConsumerFactory<>(Map.of()),
+                autoStartup);
     }
 
     private Message<?> messageOf(Object event) {

@@ -1,0 +1,32 @@
+# Adds the k3d cluster of bank-open-api to the Jenkins of compose.yaml: k3d's Docker network, the deploy account's
+# kubeconfig (written by bank-open-api's scripts/cluster-up.sh) and the bank-open-api repository. Read the
+# "Deploy to the k3d cluster" part of docs/jenkins.md first; the cluster must exist before this starts.
+services:
+  jenkins:
+    environment:
+      # Switches on the deploy stages of the Jenkinsfiles.
+      DEPLOY_TO_K3D: "true"
+      KUBECONFIG: /etc/k3d-bank/kubeconfig.yaml
+    # The long form, so that a missing path stops the start; the short form would create an empty folder there.
+    volumes:
+      - type: bind
+        source: ${HOME}/.config/bank-open-api/jenkins-kubeconfig.yaml
+        target: /etc/k3d-bank/kubeconfig.yaml
+        read_only: true
+        bind:
+          create_host_path: false
+      # The sibling project next to bank-core in ~/projects.
+      - type: bind
+        source: ../../../bank-open-api
+        target: /repos/bank-open-api
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - default
+      - k3d
+
+networks:
+  k3d:
+    name: k3d-bank
+    external: true

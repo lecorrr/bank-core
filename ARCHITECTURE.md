@@ -72,7 +72,8 @@ IncomingTransferReceived on interbank.incoming-transfers (key: payee's IBAN) -> 
 - **Time** comes from the `Clock` bean, never `Instant.now()`.
 - **The contract** `bank-core.yaml` changes first; the build regenerates the interfaces.
 - **Configuration** per machine comes from environment variables (`DB_URL`, `DB_USER`, `DB_PASSWORD`,
-  `KAFKA_BOOTSTRAP_SERVERS`, `SPRING_PROFILES_ACTIVE`).
+  `KAFKA_BOOTSTRAP_SERVERS`, `SPRING_PROFILES_ACTIVE`, `SPRING_KAFKA_LISTENER_AUTO_STARTUP`). In Kubernetes the
+  Helm chart sets them; the database password comes from a Secret.
 - **Logs** carry the trace id, span id and request id. In Docker they are ECS JSON (`trace.id`, `span.id`,
   `http.request.id`); `EcsLogsTest` checks the field names.
 
@@ -89,7 +90,13 @@ IncomingTransferReceived on interbank.incoming-transfers (key: payee's IBAN) -> 
   same idea as the `tracingspancontext` column of Debezium's outbox). KafkaTemplate's observation stays off: it
   would write the sending thread's trace instead. The listeners have observation on, so their log lines
   continue bank-integration's trace. Nothing is exported yet; Project 3 adds that.
-- **Kafka is optional at runtime**: without it bank-core serves everything else.
+- **Kafka is optional at runtime**: without it bank-core serves everything else. Where no Kafka runs at all, as
+  in the k3d cluster so far, `SPRING_KAFKA_LISTENER_AUTO_STARTUP=false` keeps the listeners from retrying the
+  connection for ever. `interbankListenerFactory` is our own factory, so it reads that property itself.
+- **The Helm chart lives with the code** (`charts/bank-core`), so a change and its deployment are one commit.
+  The image runs as user 10001 on a read-only file system with only `/tmp` writable, which the `bank`
+  namespace's "restricted" Pod Security Standard requires; the heap takes 60 % of the pod's 640 MiB. The
+  Service is internal: providers reach bank-core's data only through bank-open-api.
 - **Unreadable events are logged and skipped**, since no retry fixes them. Other failures (the database is down)
   are retried every 5 s, forever: skipping would leave a transfer PENDING or a payment without a decision.
 - **The settlement account may go below zero**: it's the bank's position at the National Bank, not a debt.
