@@ -1,6 +1,7 @@
 package dev.tkachuk.bank.account;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.hamcrest.Matchers.nullValue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -23,11 +24,23 @@ class AccountOpeningIT extends IntegrationTest {
                 .andExpect(jsonPath("$.iban").value(TestIbans.A))
                 .andExpect(jsonPath("$.holderName").value("Artem Tkachuk"))
                 .andExpect(jsonPath("$.currency").value("UAH"))
-                .andExpect(jsonPath("$.balance").value(0.0));
+                .andExpect(jsonPath("$.balance").value(0.0))
+                .andExpect(jsonPath("$.customerId").value(nullValue()));
 
         assertThat(balanceOf(TestIbans.A)).isEqualByComparingTo("0.00");
         mockMvc.perform(get("/api/v1/accounts/{iban}", TestIbans.A))
                 .andExpect(status().isOk());
+    }
+
+    @Test
+    void shouldKeepCustomerWhoHoldsAccount() throws Exception {
+        mockMvc.perform(open(TestIbans.A, "Artem Demo", "UAH", "C1001"))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.customerId").value("C1001"));
+
+        mockMvc.perform(get("/api/v1/accounts/{iban}", TestIbans.A))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.customerId").value("C1001"));
     }
 
     @Test
@@ -55,5 +68,12 @@ class AccountOpeningIT extends IntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"iban\": \"%s\", \"holderName\": \"%s\", \"currency\": \"%s\"}"
                         .formatted(iban, holderName, currency));
+    }
+
+    private static RequestBuilder open(String iban, String holderName, String currency, String customerId) {
+        return post("/api/v1/accounts")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"iban\": \"%s\", \"holderName\": \"%s\", \"currency\": \"%s\", \"customerId\": \"%s\"}"
+                        .formatted(iban, holderName, currency, customerId));
     }
 }

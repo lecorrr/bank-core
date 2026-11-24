@@ -4,10 +4,12 @@ A small core-banking service: customer accounts, deposits, transfers within the 
 and from them, and bulk payment files in JSON or ISO 20022 XML. Payments between banks go through
 [bank-integration](https://github.com/lecorrr/bank-integration). This is Project 1 of three.
 
-**Status: 0.7.0.** Every build runs the unit and integration tests and an 80 % line-coverage gate.
+**Status: 0.8.0.** Every build runs the unit and integration tests and an 80 % line-coverage gate.
 
 - **Contract-first REST API**: the OpenAPI file `src/main/resources/static/openapi/bank-core.yaml` generates the
   interfaces and DTOs; errors are RFC 9457 problem details with a `code`.
+- **Each account knows its customer**: bank-open-api asks for it, so a customer can give a provider access to
+  their own accounts only.
 - **Money handled carefully**: `BigDecimal` amounts, a double-entry ledger, `SELECT ... FOR UPDATE` in a fixed lock
   order, optimistic locking, and an `Idempotency-Key` on every transfer.
 - **Other banks**: a transfer to another bank waits in a transit account until that bank answers; payments from
@@ -72,7 +74,7 @@ Or run both in Docker after building the jar:
 docker compose up --build
 ```
 
-The log shows the running version (`bank-core 0.7.0 started`). Swagger UI is at
+The log shows the running version (`bank-core 0.8.0 started`). Swagger UI is at
 <http://localhost:8080/swagger-ui.html>, health at <http://localhost:8080/actuator/health>.
 
 Payments with other banks need bank-integration's stack, which runs the Kafka on `localhost:9092`
@@ -81,8 +83,9 @@ Kafka everything else works: outgoing transfers wait in the outbox and incoming 
 
 ## Try it
 
-Demo accounts: `UA843999990000000000000000001` (10 000 UAH), `UA573999990000000000000000002` (2 500 UAH),
-`UA303999990000000000000000003` (0 UAH) and `UA033999990000000000000000004` (1 000 USD).
+Demo accounts: `UA843999990000000000000000001` (10 000 UAH) and `UA033999990000000000000000004` (1 000 USD) of
+customer `C1001`, `UA573999990000000000000000002` (2 500 UAH) of `C1002`, and `UA303999990000000000000000003`
+(0 UAH) of `C2001`.
 
 ```
 curl -sS localhost:8080/api/v1/accounts
@@ -91,7 +94,7 @@ curl -sS localhost:8080/api/v1/accounts
 Open an account (spaces and lower case are accepted):
 
 ```
-curl -sSi -X POST localhost:8080/api/v1/accounts -H 'Content-Type: application/json' -d '{"iban": "ua21 3223 1300 0002 6007 2335 6600 1", "holderName": "Artem Tkachuk", "currency": "UAH"}'
+curl -sSi -X POST localhost:8080/api/v1/accounts -H 'Content-Type: application/json' -d '{"iban": "ua21 3223 1300 0002 6007 2335 6600 1", "holderName": "Artem Tkachuk", "currency": "UAH", "customerId": "C1001"}'
 ```
 
 Deposit 500 UAH:

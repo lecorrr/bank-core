@@ -16,6 +16,8 @@ import dev.tkachuk.bank.support.TestAccounts;
 import dev.tkachuk.bank.support.TestIbans;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.ParameterizedTest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
 import org.springframework.context.annotation.Import;
@@ -42,7 +44,21 @@ class AccountsControllerTest {
                 .andExpect(jsonPath("$.iban").value(TestIbans.A))
                 .andExpect(jsonPath("$.currency").value("UAH"))
                 .andExpect(jsonPath("$.balance").value(850.0))
+                .andExpect(jsonPath("$.customerId").value(TestAccounts.CUSTOMER))
                 .andExpect(jsonPath("$.createdAt").exists());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"c1001", "C 1001", "C1001-C1001-C1001-C1001-C1001-C1001-C"})
+    void shouldRefuseCustomerIdOutsideItsFormatBeforeService(String customerId) throws Exception {
+        String body = "{\"iban\": \"%s\", \"holderName\": \"Artem\", \"currency\": \"UAH\", \"customerId\": \"%s\"}"
+                .formatted(TestIbans.A, customerId);
+
+        mockMvc.perform(post("/api/v1/accounts").contentType(MediaType.APPLICATION_JSON).content(body))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("VALIDATION_FAILED"));
+
+        verifyNoInteractions(accountService);
     }
 
     @Test

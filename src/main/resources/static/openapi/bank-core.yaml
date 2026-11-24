@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: Bank Core API
-  version: 0.7.0
+  version: 0.8.0
   description: |
     Accounts, transfers and payment files for a small digital bank.
     This file is the contract: the Spring interfaces and DTOs are generated from it at build time.
@@ -276,6 +276,11 @@ components:
           example: Artem Tkachuk
         currency:
           $ref: '#/components/schemas/Currency'
+        customerId:
+          type: string
+          pattern: '^[A-Z0-9-]{1,36}$'
+          description: The customer who holds the account, as the bank's customer records name them
+          example: C1001
 
     DepositRequest:
       type: object
@@ -305,6 +310,10 @@ components:
         balance:
           type: number
           example: 850.00
+        customerId:
+          type: string
+          description: The customer who holds the account; null while the bank has not recorded one
+          example: C1001
         createdAt:
           type: string
           format: date-time

@@ -24,13 +24,14 @@ public class AccountService {
     private final LedgerEntryRepository ledgerEntries;
     private final Clock clock;
 
+    /** Opens a customer account; customerId may be null while the customer is not known yet. */
     @Transactional
-    public Account open(String rawIban, String holderName, String currency) {
+    public Account open(String rawIban, String holderName, String currency, String customerId) {
         Iban iban = Iban.parse(rawIban);
         if (accounts.existsByIban(iban.value())) {
             throw new BankException(ErrorCode.ACCOUNT_ALREADY_EXISTS, "Account " + iban + " already exists");
         }
-        return accounts.save(Account.open(iban, holderName.strip(), currency, clock.instant()));
+        return accounts.save(Account.open(iban, holderName.strip(), currency, customerId, clock.instant()));
     }
 
     public List<Account> list() {

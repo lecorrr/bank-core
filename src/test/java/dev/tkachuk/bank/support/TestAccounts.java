@@ -10,6 +10,8 @@ import org.springframework.test.util.ReflectionTestUtils;
 /** Accounts for unit tests, built without JPA. */
 public final class TestAccounts {
 
+    public static final String CUSTOMER = "C1001";
+
     private TestAccounts() {
     }
 
@@ -21,6 +23,7 @@ public final class TestAccounts {
         ReflectionTestUtils.setField(account, "currency", currency);
         ReflectionTestUtils.setField(account, "balance", new BigDecimal(balance));
         ReflectionTestUtils.setField(account, "kind", AccountKind.CUSTOMER);
+        ReflectionTestUtils.setField(account, "customerId", CUSTOMER);
         ReflectionTestUtils.setField(account, "createdAt", Instant.parse("2026-11-01T09:00:00Z"));
         return account;
     }
@@ -29,6 +32,7 @@ public final class TestAccounts {
         Account account = account(id, iban, "UAH", balance);
         ReflectionTestUtils.setField(account, "holderName", kind + " account");
         ReflectionTestUtils.setField(account, "kind", kind);
+        ReflectionTestUtils.setField(account, "customerId", null);
         return account;
     }
 }

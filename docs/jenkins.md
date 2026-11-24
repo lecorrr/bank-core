@@ -65,18 +65,37 @@ docker compose -f ci/jenkins/compose.yaml -f ci/jenkins/compose.k3d.yaml up -d -
 
 Build the `bank-core` job: after the tests and the image it runs **Deploy to k3d**. Then create a second job
 the same way as the first, named `bank-open-api`, with the repository `file:///repos/bank-open-api`, and build
-it. Its last stage calls the API through Traefik, as a provider would. From your machine:
+it. Its last stage signs in as the test provider and calls the API through Traefik over HTTPS. From your
+machine:
 
 ```
 kubectl -n bank get pods
 ```
 
+The same check by hand, in bank-open-api:
+
 ```
-curl -sS -w '\n' -H "X-Request-ID: $(cat /proc/sys/kernel/random/uuid)" localhost:8480/v2/accounts
+bash scripts/smoke-test.sh
 ```
 
 The deploy account may change Deployments, Services and routes in the `bank` namespace and nothing else; the
 cluster and PostgreSQL stay with `cluster-up.sh`.
+
+## After your machine restarts
+
+Jenkins has no restart policy: started by Docker at boot, it could come up before the network has DNS and fail
+every download until restarted. Start the cluster first, in `~/projects/bank-open-api`:
+
+```
+bash scripts/cluster-up.sh
+```
+
+Then Jenkins, here in bank-core, with `DOCKER_GID` exported as above (without the cluster, leave out the second
+file):
+
+```
+docker compose -f ci/jenkins/compose.yaml -f ci/jenkins/compose.k3d.yaml up -d
+```
 
 ## When something goes wrong
 

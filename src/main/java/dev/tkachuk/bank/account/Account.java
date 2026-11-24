@@ -52,13 +52,19 @@ public class Account {
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
 
-    public static Account open(Iban iban, String holderName, String currency, Instant createdAt) {
+    // The customer who holds the account; null for the bank's own accounts and for some opened before 0.8.
+    @Column(name = "customer_id", length = 36)
+    private String customerId;
+
+    public static Account open(Iban iban, String holderName, String currency, String customerId,
+            Instant createdAt) {
         Account account = new Account();
         account.iban = iban.value();
         account.holderName = holderName;
         account.currency = currency;
         account.balance = BigDecimal.ZERO.setScale(2);
         account.kind = AccountKind.CUSTOMER;
+        account.customerId = customerId;
         account.createdAt = createdAt;
         return account;
     }

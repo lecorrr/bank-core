@@ -29,7 +29,7 @@ public class AccountsController implements AccountsApi {
     @Override
     public ResponseEntity<AccountResponse> openAccount(OpenAccountRequest request) {
         Account account = accountService.open(request.getIban(), request.getHolderName(),
-                request.getCurrency().getValue());
+                request.getCurrency().getValue(), request.getCustomerId());
         return ResponseEntity.created(URI.create("/api/v1/accounts/" + account.getIban()))
                 .body(mapper.toResponse(account));
     }

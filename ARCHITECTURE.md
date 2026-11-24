@@ -104,6 +104,10 @@ IncomingTransferReceived on interbank.incoming-transfers (key: payee's IBAN) -> 
   before bank-core sees a payment; whether the account exists and in which currency only bank-core knows.
 - **Hot rows**: every interbank transfer locks TRANSIT and every payment in locks SETTLEMENT. Fine at this size.
 - **Released migrations are never edited**: Flyway checksums them. A schema change is the next `V` file.
+- **An account's customer is an id, not a customer record.** bank-core keeps no customers yet; `customer_id` is
+  the number the bank's customer records give, and Keycloak's users carry the same number. It is optional when
+  opening an account, so older clients keep working; accounts without one cannot be shared through
+  bank-open-api. The bank's own accounts never have one (a check constraint).
 
 ## Extending it
 
