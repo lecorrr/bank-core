@@ -13,7 +13,7 @@
 
     <groupId>dev.tkachuk</groupId>
     <artifactId>bank-core</artifactId>
-    <version>0.8.0</version>
+    <version>0.9.0</version>
     <name>bank-core</name>
     <description>Accounts, transfers and payment files for a small digital bank</description>
 
@@ -74,8 +74,9 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-kafka</artifactId>
         </dependency>
-        <!-- Tracing with the OpenTelemetry SDK, trace ids in the logs only. No exporter yet: the
-             spring-boot-starter-opentelemetry would add the OTLP exporter and registry. -->
+        <!-- Tracing with the OpenTelemetry SDK: trace ids in the logs, and the spans sent over OTLP to the trace
+             collector when OTEL_EXPORTER_OTLP_TRACES_ENDPOINT names it (the Helm chart does). The OTLP exporter
+             alone, not spring-boot-starter-opentelemetry, which would push metrics over OTLP too. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-micrometer-tracing-opentelemetry</artifactId>
@@ -90,6 +91,10 @@
                     <artifactId>aopalliance</artifactId>
                 </exclusion>
             </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp</artifactId>
         </dependency>
         <!-- Transactional outbox: Spring Modulith's event publication registry (JDBC) and its Kafka support. -->
         <dependency>

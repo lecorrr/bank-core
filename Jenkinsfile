@@ -54,6 +54,22 @@ pipeline {
                         --set image.repository=${REGISTRY}/bank-core --set-string image.tag=${IMAGE_TAG} \
                         --rollback-on-failure --timeout 5m
                 '''
+                // Helm is done once the new pod is ready, but the old one answers on during its preStop pause,
+                // until the Service leaves it out. The job ends when only pods of this image are left, so
+                // bank-open-api's smoke test, run next, meets this version only.
+                sh '''
+                    deadline=$(( $(date +%s) + 120 ))
+                    while kubectl --namespace bank get pods -l app.kubernetes.io/instance=bank-core \
+                        -o jsonpath='{range .items[*]}{.metadata.labels.app\\.kubernetes\\.io/version}{"\\n"}{end}' \
+                        | grep -qvxF "${IMAGE_TAG}"; do
+                        if [ "$(date +%s)" -ge "$deadline" ]; then
+                            echo "Pods of another version are still there after two minutes:"
+                            kubectl --namespace bank get pods -l app.kubernetes.io/instance=bank-core
+                            exit 1
+                        fi
+                        sleep 2
+                    done
+                '''
             }
             post {
                 failure {

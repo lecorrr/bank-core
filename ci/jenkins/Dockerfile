@@ -1,7 +1,11 @@
 # Jenkins for the bank's services. The Docker CLI and buildx talk to the host's Docker through the mounted socket:
 # Testcontainers starts its databases that way, and the pipelines build the images. kubectl and helm deploy to
 # the k3d cluster of bank-open-api.
-FROM jenkins/jenkins:lts-jdk21
+#
+# One Jenkins release, the LTS of November 2026: a rebuild, after a power cut or on another machine, gives the same
+# Jenkins, not whatever lts-jdk21 means that day. Moving to a newer LTS is a change of this line, then
+# docker compose ... up -d --build (docs/jenkins.md); Jenkins upgrades its home on its first start.
+FROM jenkins/jenkins:2.580.3-lts-jdk21
 
 USER root
 COPY --from=docker:cli /usr/local/bin/docker /usr/local/bin/docker

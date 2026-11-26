@@ -22,6 +22,11 @@ kafka:
   enabled: false
   bootstrapServers: ""
 
+# The service's spans go to the trace collector of the cluster (bank-open-api's cluster/charts/logging), over
+# OTLP/HTTP.
+tracing:
+  endpoint: http://trace-collector.logging.svc.cluster.local:4318/v1/traces
+
 # The JVM takes 60 % of the limit for its heap (see the Dockerfile); the rest is metaspace and threads.
 resources:
   requests:

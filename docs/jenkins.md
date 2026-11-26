@@ -63,7 +63,9 @@ bank-open-api repository. Here in bank-core, with `DOCKER_GID` exported as above
 docker compose -f ci/jenkins/compose.yaml -f ci/jenkins/compose.k3d.yaml up -d --build
 ```
 
-Build the `bank-core` job: after the tests and the image it runs **Deploy to k3d**. Then create a second job
+Build the `bank-core` job: after the tests and the image it runs **Deploy to k3d**, which ends once only pods of
+the new image are left. The old pod answers for a few seconds after the new one is ready, until the Service leaves
+it out; waiting for it to go means the next job meets the new version only. Then create a second job
 the same way as the first, named `bank-open-api`, with the repository `file:///repos/bank-open-api`, and build
 it. Its last stage signs in as the test provider and calls the API through Traefik over HTTPS. From your
 machine:
@@ -97,6 +99,21 @@ file):
 docker compose -f ci/jenkins/compose.yaml -f ci/jenkins/compose.k3d.yaml up -d
 ```
 
+## Its version
+
+The image is built on one Jenkins release, `jenkins/jenkins:2.580.3-lts-jdk21` (`ci/jenkins/Dockerfile`), so
+`up -d --build` gives the same Jenkins every time. The version you run shows at the bottom right of every page,
+and here:
+
+```
+docker compose -f ci/jenkins/compose.yaml exec jenkins sh -c 'echo $JENKINS_VERSION'
+```
+
+To move to a newer LTS (<https://www.jenkins.io/changelog-stable/>), change the `FROM` line and run the
+`up -d --build` command again. Jenkins upgrades its home, the `jenkins-home` volume, on its first start, and does
+not go back: keep the old version in git until the new one has built a job. Plugins are updated apart, under
+**Manage Jenkins**, **Plugins**.
+
 ## When something goes wrong
 
 - `No such DSL method 'junit'`: install the **JUnit** plugin (Manage Jenkins, Plugins), then build again.
@@ -111,6 +128,8 @@ docker compose -f ci/jenkins/compose.yaml -f ci/jenkins/compose.k3d.yaml up -d
   missing. Run `bash scripts/cluster-up.sh` in bank-open-api, which must sit next to bank-core in `~/projects`.
 - `helm: not found` in the deploy stage: the Jenkins image is from before bank-core 0.7.0; `up -d --build`
   builds it again.
+- A plugin says it needs a newer Jenkins: the image is pinned (see "Its version"); move to the LTS it names, or
+  keep the plugin's older release.
 - `Forbidden`, `Unauthorized` or no connection to the cluster after you deleted and created it again: the
   Jenkins container still has the old cluster's network. Run `bash scripts/cluster-up.sh` in bank-open-api,
   then the `up -d --build` command above with `--force-recreate` added.

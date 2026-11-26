@@ -56,7 +56,8 @@ management:
         enabled: true
   tracing:
     sampling:
-      # Keep every trace. Nothing is exported yet; logs carry the trace ids either way.
+      # Keep every trace. In the k3d cluster the spans go to the trace collector (OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+      # set in the Helm chart); elsewhere nothing is exported. The logs carry the trace ids either way.
       probability: 1.0
 
 springdoc:

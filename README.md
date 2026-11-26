@@ -4,7 +4,7 @@ A small core-banking service: customer accounts, deposits, transfers within the 
 and from them, and bulk payment files in JSON or ISO 20022 XML. Payments between banks go through
 [bank-integration](https://github.com/lecorrr/bank-integration). This is Project 1 of three.
 
-**Status: 0.8.0.** Every build runs the unit and integration tests and an 80 % line-coverage gate.
+**Status: 0.9.0.** Every build runs the unit and integration tests and an 80 % line-coverage gate.
 
 - **Contract-first REST API**: the OpenAPI file `src/main/resources/static/openapi/bank-core.yaml` generates the
   interfaces and DTOs; errors are RFC 9457 problem details with a `code`.
@@ -19,7 +19,9 @@ and from them, and bulk payment files in JSON or ISO 20022 XML. Payments between
   payment is its own transfer, so uploading a file again pays nothing twice.
 - **One trace per payment**: every log line has the trace and span id (ECS JSON in Docker). A transfer's trace
   runs from the REST call through Kafka to bank-integration and back with the answer: the W3C `traceparent`
-  travels in the record headers and is stored with the outbox event, so a resend continues the same trace.
+  travels in the record headers and is stored with the outbox event, so a resend continues the same trace. In
+  the k3d cluster the spans go over OTLP to bank-open-api's trace collector and on to Kibana's APM app, where a
+  provider's call shows across Traefik, bank-open-api and bank-core.
 - **Runs on Kubernetes**: a Helm chart (`charts/bank-core`) for the k3d cluster of
   [bank-open-api](https://github.com/lecorrr/bank-open-api), the open banking API in front of bank-core. The pod
   runs as a non-root user on a read-only file system, with probes on Spring Boot's liveness and readiness; Jenkins
@@ -74,7 +76,7 @@ Or run both in Docker after building the jar:
 docker compose up --build
 ```
 
-The log shows the running version (`bank-core 0.8.0 started`). Swagger UI is at
+The log shows the running version (`bank-core 0.9.0 started`). Swagger UI is at
 <http://localhost:8080/swagger-ui.html>, health at <http://localhost:8080/actuator/health>.
 
 Payments with other banks need bank-integration's stack, which runs the Kafka on `localhost:9092`
@@ -159,7 +161,7 @@ docker compose exec postgres psql -U bank -d bank -c "SELECT iban, kind, balance
 
 ```
 src/main/java/dev/tkachuk/bank/
-  common/        amounts, errors, IBAN, clock, current trace, request id filter, error handler
+  common/        amounts, errors, IBAN, clock, current trace, request id filter, error handler, span names
   ledger/        ledger entries
   account/       accounts, deposits, statements
   transfer/      transfers, settlement of transfers to other banks, payments from other banks

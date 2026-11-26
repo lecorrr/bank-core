@@ -7,7 +7,7 @@ for one Maven module: the boundaries are packages, and `LayeringTest` enforces t
 
 | Package | Contains | May use |
 |---|---|---|
-| `common` | `Amounts`, `BankException` and `ErrorCode`, `Iban`, the `Clock`, `CurrentTrace`; `common.web`: request id filter, `ApiExceptionHandler` | nothing else of ours |
+| `common` | `Amounts`, `BankException` and `ErrorCode`, `Iban`, the `Clock`, `CurrentTrace`; `common.web`: request id filter, `ApiExceptionHandler`, `TracingConfig` | nothing else of ours |
 | `ledger` | `LedgerEntry`: append-only statement lines | `common` |
 | `account` | `Account`, deposits, statements, the accounts API; `InternalAccounts` (transit and settlement) | `common`, `ledger` |
 | `transfer` | `Transfer` and idempotency, the transfers API; `TransferSettlement` (answers from other banks); `IncomingTransfers` (payments from other banks) | `common`, `ledger`, `account` |
@@ -76,6 +76,9 @@ IncomingTransferReceived on interbank.incoming-transfers (key: payee's IBAN) -> 
   Helm chart sets them; the database password comes from a Secret.
 - **Logs** carry the trace id, span id and request id. In Docker they are ECS JSON (`trace.id`, `span.id`,
   `http.request.id`); `EcsLogsTest` checks the field names.
+- **Spans** leave bank-core only when `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` names a collector, as the Helm chart
+  does in the k3d cluster; `TracingExportIT` checks that a request's span arrives. Their HTTP attributes use
+  OpenTelemetry's names (`TracingConfig`), the ones the cluster's trace collector keeps.
 
 ## Decisions
 
@@ -89,7 +92,13 @@ IncomingTransferReceived on interbank.incoming-transfers (key: payee's IBAN) -> 
   `traceparent` in the event, and `InterbankConfiguration` turns it into the record's `traceparent` header (the
   same idea as the `tracingspancontext` column of Debezium's outbox). KafkaTemplate's observation stays off: it
   would write the sending thread's trace instead. The listeners have observation on, so their log lines
-  continue bank-integration's trace. Nothing is exported yet; Project 3 adds that.
+  continue bank-integration's trace.
+- **Spans go to bank-open-api's trace collector, not to Elasticsearch.** The collector keeps an allow-list of
+  attributes and masks IBANs before APM Server stores anything, so bank-core sends what it has and the one place
+  that decides what is kept is the collector (bank-open-api's `cluster/charts/logging/tracing/collector.yaml`).
+  The server spans carry OpenTelemetry's HTTP names, which APM Server reads as HTTP; Spring's own names
+  (`method`, `uri`, `status`) would arrive as unknown labels. The exporter is OTLP over HTTP with its default
+  sender; outside the cluster no endpoint is set and nothing is exported.
 - **Kafka is optional at runtime**: without it bank-core serves everything else. Where no Kafka runs at all, as
   in the k3d cluster so far, `SPRING_KAFKA_LISTENER_AUTO_STARTUP=false` keeps the listeners from retrying the
   connection for ever. `interbankListenerFactory` is our own factory, so it reads that property itself.
